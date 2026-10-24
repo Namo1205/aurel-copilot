@@ -212,6 +212,53 @@ export function reducer(state: State, action: Action): State {
     case "add_message": {
       if (state.items[action.message.id]) return state;
       const receivedAt = new Date(Date.now() - (action.message.receivedMinutesAgo ?? 0) * 60000).toISOString();
+      if (action.message.serverAnalysis) {
+        const p = action.message.serverAnalysis.proposal;
+        const bookingId = p.bookingMatch.bookingId;
+        const vip = isVipOrAdvisor({ message: action.message, important: [] } as unknown as InboxItem, bookingId);
+        const assign = assignOwner({ proposal: p, pendingByOwner: pendingByOwner(state), rotation: state.rotation, isVipOrAdvisor: vip, now: new Date(), overrides: state.shiftOverrides });
+        const queue = queueFor(p);
+        const booking = bookingId ? getBooking(bookingId) : undefined;
+        const important = importantReasons({
+          proposal: p,
+          body: action.message.body,
+          arrivalIso: booking?.checkIn ?? null,
+          now: new Date(),
+          isVipOrAdvisor: vip,
+          isRepeat: /third time|second time|again|chasing|still (no|haven't|not)|nobody (has )?(replied|answered)/i.test(action.message.body),
+        });
+        const nowIso = action.message.serverAutoSent?.at ?? new Date().toISOString();
+        const auto = p.autoSend.kind !== "none";
+        const closed = p.autoSend.kind === "policy_answer";
+        const item: InboxItem = {
+          message: action.message,
+          receivedAt,
+          status: closed ? "auto_sent" : "drafted",
+          analysis: action.message.serverAnalysis,
+          draft: p.draftReply,
+          approved: p.actions.map(() => true),
+          ownerId: closed ? AI_OWNER_ID : assign.ownerId,
+          ownerRule: closed ? "Policy-only message answered from cited policy; the AI agent owns it." : assign.rule,
+          ownerHistory: [{ from: null, to: closed ? AI_OWNER_ID : assign.ownerId, at: nowIso, reason: closed ? "Sent alone" : assign.rule }],
+          queue,
+          important,
+          autoSentAt: auto ? nowIso : undefined,
+          autoSentBody: auto ? (action.message.serverAutoSent?.body ?? p.autoSend.body ?? p.draftReply) : undefined,
+          delivery: action.message.serverAutoSent?.delivery,
+          handledAt: closed ? nowIso : undefined,
+          handledBy: closed ? AI_OWNER_ID : undefined,
+        };
+        return {
+          ...state,
+          items: {
+            ...state.items,
+            [action.message.id]: item,
+          },
+          order: [action.message.id, ...state.order],
+          selectedId: action.message.id,
+          rotation: assign.rotation,
+        };
+      }
       return {
         ...state,
         items: {
@@ -546,6 +593,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .catch((e) => dispatch({ type: "delivered", id, delivery: { via: "gmail", at: new Date().toISOString(), error: e instanceof Error ? e.message : String(e) } }));
     }
   }, [state.hydrated, state.order, state.items]);
+
+  // Dynamic browser tab title: e.g. "(3) Aurel Reservations" when pending items need review.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const count = state.order.filter((id) => {
+      const it = state.items[id];
+      return it && isPending(it);
+    }).length;
+    document.title = count > 0 ? `(${count}) Aurel Reservations` : "Aurel Reservations AI Agent";
+  }, [state.order, state.items]);
 
   const value = useMemo(() => ({ state, dispatch }), [state]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

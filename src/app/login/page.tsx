@@ -48,7 +48,7 @@ function LoginForm() {
 
   const submit = () => {
     if (pw !== PASSWORD) {
-      setErr("Wrong password. The prototype password is shown below the form.");
+      setErr("Incorrect password. Please try again.");
       return;
     }
     const s = ROSTER.find((x) => x.id === staffId)!;
@@ -110,7 +110,7 @@ function LoginForm() {
         {err ? <div className="text-xs text-rose-700">{err}</div> : null}
         <Button onClick={submit}>Sign in</Button>
         <p className="text-[11px] text-stone-500">
-          Prototype only: the password for every role is <span className="font-mono">aurel</span>. Roles change what you see; the desk is the same for everyone.
+          Roles change what you see; the desk is the same for everyone.
           {state.session ? ` Currently signed in as ${state.session.name}.` : ""}
         </p>
         <p className="text-[11px] text-stone-500">

@@ -1,4 +1,5 @@
 import type { Channel } from "@/lib/agent/schema";
+import type { AnalysisResult } from "@/lib/agent";
 
 export interface InboundMessage {
   id: string;
@@ -11,6 +12,13 @@ export interface InboundMessage {
   bookingRef?: string; // present when the channel carries it (OTA threads, reply-to-confirmation emails)
   // Set when the message came in through the live Gmail link; replies go back in the same thread.
   gmail?: { id: string; threadId: string; messageId: string; references?: string; to?: string };
+  serverAnalysis?: AnalysisResult;
+  serverAutoSent?: {
+    kind: string;
+    body: string;
+    at: string;
+    delivery: { via: "gmail"; at: string; error?: string };
+  };
 }
 
 // The seven messages from the brief plus a few that exercise the guardrails.

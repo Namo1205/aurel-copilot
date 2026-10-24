@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { isPending, useStore } from "@/lib/store";
 import { ChannelIcon, timeAgo } from "@/components/ui";
 import { CATEGORY_LABEL } from "@/lib/agent/schema";
@@ -31,8 +31,13 @@ export function ConversationList({
   onCompose?: () => void;
 }) {
   const { state } = useStore();
-  const [now] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const me = state.session?.staffId;
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <aside className="w-[320px] shrink-0 border-r border-stone-200 bg-white flex flex-col min-h-0">
@@ -73,7 +78,11 @@ export function ConversationList({
               <button
                 onClick={() => onSelect(c)}
                 className={`w-full text-left pl-3 pr-4 py-3 border-b border-stone-100 border-l-[3px] flex gap-3 transition ${selected ? "bg-stone-50" : "hover:bg-stone-50/60"} ${
-                  waiting && it.important.length ? "border-l-rose-400" : "border-l-transparent"
+                  waiting && (it.important.length || ageMin >= 60)
+                    ? "border-l-rose-500"
+                    : waiting && ageMin >= 30
+                      ? "border-l-amber-400"
+                      : "border-l-transparent"
                 }`}
               >
                 <div className="relative shrink-0">
@@ -83,7 +92,19 @@ export function ConversationList({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
                     <span className={`text-sm truncate ${waiting ? "font-semibold text-stone-900" : "font-medium text-stone-600"}`}>{m.fromName}</span>
-                    <span className={`ml-auto text-xs shrink-0 tabular-nums ${stale ? "text-rose-700 font-medium" : "text-stone-400"}`}>{timeAgo(c.lastActivity)}</span>
+                    <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                      {waiting && ageMin >= 60 ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
+                          SLA {Math.floor(ageMin / 60)}h{ageMin % 60 ? ` ${ageMin % 60}m` : ""}
+                        </span>
+                      ) : waiting && ageMin >= 30 ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                          ⏳ {ageMin}m
+                        </span>
+                      ) : null}
+                      <span className={`text-xs tabular-nums ${stale ? "text-rose-700 font-medium" : "text-stone-400"}`}>{timeAgo(c.lastActivity)}</span>
+                    </div>
                   </div>
                   <div className={`text-[13px] truncate ${waiting ? "text-stone-800" : "text-stone-500"}`}>{preview.replace(/\s+/g, " ")}</div>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-stone-500">
