@@ -112,6 +112,8 @@ type Action =
   | { type: "resend_result"; id: string; ok: boolean; body: string; at: string; by: string; error?: string }
   // Sorting failed, or the person wants to write the reply themselves from scratch.
   | { type: "manual_start"; id: string; by: string }
+  // Employee manually replies to a conversation (either open or previously resolved).
+  | { type: "manual_reply"; id: string; body: string; by: string; delivery?: { via: "gmail"; at: string; error?: string } }
   | { type: "shift_tick"; now: string }
   | { type: "reset" };
 
@@ -388,6 +390,33 @@ export function reducer(state: State, action: Action): State {
         ownerId: action.by,
         ownerRule: "Taken by hand after sorting failed.",
         ownerHistory: [...(it.ownerHistory ?? []), { from: it.ownerId, to: action.by, at: nowIso, reason: "Taken by hand after sorting failed" }],
+      });
+    }
+    case "manual_reply": {
+      const it = state.items[action.id];
+      if (!it) return state;
+      const nowIso = new Date().toISOString();
+      const newReply = {
+        channel: it.message.channel,
+        sentAt: nowIso,
+        body: action.body,
+        to: it.message.from,
+        deliveredVia: action.delivery?.via,
+        deliveryError: action.delivery?.error,
+      };
+      return patch(state, action.id, {
+        status: "sent",
+        result: {
+          traces: it.result?.traces ?? [],
+          handoffs: it.result?.handoffs ?? [],
+          bookingUpdates: it.result?.bookingUpdates ?? [],
+          paymentLinks: it.result?.paymentLinks ?? [],
+          skipped: it.result?.skipped ?? [],
+          sentReply: newReply,
+        },
+        handledAt: nowIso,
+        handledBy: action.by,
+        edited: true,
       });
     }
     case "shift_override": {

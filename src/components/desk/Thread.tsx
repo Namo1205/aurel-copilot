@@ -131,7 +131,48 @@ export function Thread({ conversation }: { conversation: Conversation }) {
   const session = state.session;
   const [busy, setBusy] = useState(false);
   const [now] = useState(() => new Date());
+  const [manualText, setManualText] = useState("");
+  const [replyMode, setReplyMode] = useState<"ai" | "manual">("ai");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const sendManualReply = async (textToSend: string, targetId: string) => {
+    if (!textToSend.trim() || !session) return;
+    setBusy(true);
+    try {
+      let delivery: { via: "gmail"; at: string; error?: string } | undefined;
+      if (m.gmail) {
+        try {
+          const r = await fetch("/api/gmail/send", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ message: m, body: textToSend }),
+          });
+          const j = (await r.json()) as { ok: boolean; at?: string; error?: string };
+          delivery = {
+            via: "gmail",
+            at: j.at ?? new Date().toISOString(),
+            error: j.ok ? undefined : (j.error ?? `HTTP ${r.status}`),
+          };
+        } catch (err) {
+          delivery = {
+            via: "gmail",
+            at: new Date().toISOString(),
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }
+      dispatch({
+        type: "manual_reply",
+        id: targetId,
+        body: textToSend,
+        by: session.staffId,
+        delivery,
+      });
+      setManualText("");
+    } finally {
+      setBusy(false);
+    }
+  };
   const open = conversation.open;
   const head = open ?? conversation.latest;
   const m = head.message;
@@ -276,31 +317,122 @@ export function Thread({ conversation }: { conversation: Conversation }) {
       {/* Composer */}
       <div className="border-t border-stone-200 bg-white px-5 py-4 shrink-0">
         {!open ? (
-          <p className="text-sm text-stone-500">Nothing waiting. The thread reopens here when the guest writes again.</p>
-        ) : !p ? null : !canAct ? (
-          <p className="text-sm text-stone-600">
-            {ownerName(open.ownerId)} owns this conversation. You can read it; only the owner, a senior or a manager can reply.
-          </p>
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between text-xs text-stone-500">
+              <span className="font-semibold text-stone-700 flex items-center gap-1.5">
+                <span>✍️</span> Send manual reply or follow-up to {m.fromName}
+              </span>
+              <span className="text-stone-400">
+                {m.gmail ? "Delivered to guest via live Gmail" : "Desk simulation"}
+              </span>
+            </div>
+            <textarea
+              value={manualText}
+              onChange={(e) => setManualText(e.target.value)}
+              rows={3}
+              placeholder={`Type a manual message to ${m.fromName}…`}
+              className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
+            />
+            <div className="flex items-center gap-2">
+              <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim()}>
+                {busy ? "Sending…" : "Send Manual Reply"}
+              </Button>
+            </div>
+          </div>
+        ) : !p ? (
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between text-xs text-stone-500">
+              <span className="font-semibold text-stone-700">✍️ Write manual reply to {m.fromName}</span>
+            </div>
+            <textarea
+              value={manualText}
+              onChange={(e) => setManualText(e.target.value)}
+              rows={4}
+              placeholder={`Type your reply to ${m.fromName}…`}
+              className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
+            />
+            <div className="flex items-center gap-2">
+              <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim()}>
+                {busy ? "Sending…" : "Send Manual Reply"}
+              </Button>
+            </div>
+          </div>
+        ) : !canAct ? (
+          <div className="flex items-center justify-between text-sm text-stone-600 bg-stone-50 p-3.5 rounded-xl border border-stone-200">
+            <span>
+              <span className="font-medium text-stone-800">{ownerName(open.ownerId)}</span> owns this conversation.
+            </span>
+            {session ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => dispatch({ type: "reassign", id, ownerId: session.staffId, by: session.staffId })}
+              >
+                Take ownership & reply
+              </Button>
+            ) : null}
+          </div>
         ) : (
           <>
-            <div className="flex items-baseline mb-1.5">
-              <span className="text-[11px] uppercase tracking-wide text-stone-400">{open.autoSentAt ? "Follow-up · draft by the AI agent" : "Draft by the AI agent"}</span>
-              {(open.draft ?? p.draftReply) !== p.draftReply ? (
-                <button onClick={() => dispatch({ type: "set_draft", id, draft: p.draftReply })} className="ml-auto text-xs text-stone-500 hover:underline">
-                  Back to the AI draft
+            <div className="flex items-center justify-between mb-2">
+              <div className="inline-flex rounded-lg border border-stone-200 bg-stone-100 p-0.5 text-xs font-medium">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplyMode("ai");
+                    if (p.draftReply) dispatch({ type: "set_draft", id, draft: p.draftReply });
+                  }}
+                  className={`px-3 py-1 rounded-md transition ${
+                    replyMode === "ai"
+                      ? "bg-white text-stone-900 shadow-sm font-semibold"
+                      : "text-stone-600 hover:text-stone-900"
+                  }`}
+                >
+                  🤖 AI Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplyMode("manual");
+                    dispatch({ type: "set_draft", id, draft: "" });
+                  }}
+                  className={`px-3 py-1 rounded-md transition ${
+                    replyMode === "manual"
+                      ? "bg-white text-stone-900 shadow-sm font-semibold"
+                      : "text-stone-600 hover:text-stone-900"
+                  }`}
+                >
+                  ✍️ Write Manually
+                </button>
+              </div>
+              {replyMode === "ai" && (open.draft ?? p.draftReply) !== p.draftReply ? (
+                <button
+                  onClick={() => dispatch({ type: "set_draft", id, draft: p.draftReply })}
+                  className="text-xs text-stone-500 hover:underline"
+                >
+                  Reset to original AI draft
                 </button>
               ) : null}
             </div>
             <textarea
-              value={open.draft ?? p.draftReply}
+              value={open.draft ?? (replyMode === "manual" ? "" : p.draftReply)}
               onChange={(e) => dispatch({ type: "set_draft", id, draft: e.target.value })}
-              rows={Math.min(10, Math.max(3, (open.draft ?? p.draftReply).split("\n").length))}
-              placeholder="Write the reply…"
+              rows={Math.min(10, Math.max(3, (open.draft ?? (replyMode === "manual" ? "" : p.draftReply)).split("\n").length))}
+              placeholder={replyMode === "manual" ? `Write your manual reply to ${m.fromName}…` : "Edit the AI draft…"}
               className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
             <div className="mt-2 flex items-center gap-2 flex-wrap">
-              <Button onClick={() => executeNow(true)} disabled={busy || !(open.draft ?? p.draftReply).trim()}>
-                {busy ? "Sending…" : approvedCount ? `Approve & send · ${approvedCount} action${approvedCount === 1 ? "" : "s"}` : "Send"}
+              <Button
+                onClick={() => executeNow(true)}
+                disabled={busy || !(open.draft ?? (replyMode === "manual" ? "" : p.draftReply)).trim()}
+              >
+                {busy
+                  ? "Sending…"
+                  : replyMode === "manual"
+                    ? "Send Manual Reply"
+                    : approvedCount
+                      ? `Approve & send · ${approvedCount} action${approvedCount === 1 ? "" : "s"}`
+                      : "Send"}
               </Button>
               <Button variant="ghost" onClick={() => executeNow(false)} disabled={busy}>
                 {handoff ? "Hand off without replying" : p.actions.length ? "Do the actions, no reply" : "Close without replying"}
