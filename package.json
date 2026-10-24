@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@google/genai": "^2.31.0",
+    "@tailwindcss/oxide-linux-x64-gnu": "^4.3.3",
     "next": "16.4.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
