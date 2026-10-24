@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Aurel strategy memo</title>
+<style>
+  @page { size: A4; margin: 10mm 11mm; }
+  :root {
+    --ink: #1c1a17; --muted: #6b665e; --line: #ddd8cf; --paper: #ffffff; --soft: #f4f1ea;
+    --brand: #1f3d2b; --brand2: #4f7a5f; --brand3: #b7cdbd; --amber: #b8860b; --rose: #b3362f; --sky: #2c6b8f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; font-size: 9.6pt; line-height: 1.32; }
+  .page { width: 188mm; min-height: 275mm; page-break-after: always; position: relative; }
+  .page:last-child { page-break-after: auto; }
+  h1 { font-size: 17pt; margin: 0 0 2px; letter-spacing: -0.2px; }
+  .meta { color: var(--muted); font-size: 8.4pt; margin-bottom: 6px; }
+  .gloss { font-size: 8pt; color: var(--muted); border-left: 2px solid var(--brand3); padding-left: 7px; margin-bottom: 8px; }
+  h2 { font-size: 11.5pt; margin: 9px 0 5px; padding-bottom: 3px; border-bottom: 1px solid var(--line); color: var(--brand); }
+  h2 span.n { display:inline-block; width: 16px; height:16px; border-radius: 50%; background: var(--brand); color:#fff; font-size: 8pt; text-align:center; line-height:16px; margin-right: 6px; vertical-align: 1px; }
+  p { margin: 3px 0; }
+  .row { display: flex; gap: 8px; align-items: stretch; }
+  .col { flex: 1; min-width: 0; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 6px 0; }
+  .tile { background: var(--soft); border-radius: 6px; padding: 6px 8px; }
+  .tile .v { font-size: 15pt; font-weight: 600; color: var(--brand); line-height: 1.05; }
+  .tile .v small { font-size: 9pt; color: var(--muted); font-weight: 500; }
+  .tile .l { font-size: 7.8pt; color: var(--muted); margin-top: 2px; }
+  .tile.bad .v { color: var(--rose); }
+  figure { margin: 4px 0; }
+  figcaption { font-size: 7.8pt; color: var(--muted); margin-top: 2px; }
+  svg { display: block; width: 100%; height: auto; font-family: inherit; }
+  svg text { font-size: 8.4px; fill: var(--ink); }
+  svg .small { font-size: 7.4px; fill: var(--muted); }
+  svg .bold { font-weight: 600; }
+  svg .white { fill: #fff; }
+  svg .mut { fill: var(--muted); }
+  table { border-collapse: collapse; width: 100%; font-size: 8.6pt; }
+  th, td { text-align: left; vertical-align: top; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  th { font-size: 7.6pt; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; background: var(--soft); }
+  .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .card { border: 1px solid var(--line); border-radius: 6px; padding: 6px 7px; font-size: 8.2pt; }
+  .card b { display: block; font-size: 8.8pt; margin-bottom: 2px; }
+  .card.x b::before { content: "✕ "; color: var(--rose); }
+  .card .why { color: var(--muted); }
+  .coo { display: grid; grid-template-columns: 1.1fr 2.2fr; gap: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .coo > div { padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 8.8pt; }
+  .coo > div:nth-child(odd) { background: var(--soft); font-weight: 600; }
+  .coo > div:nth-last-child(-n+2) { border-bottom: none; }
+  .foot { position: absolute; bottom: 0; left: 0; right: 0; font-size: 7.2pt; color: var(--muted); border-top: 1px solid var(--line); padding-top: 4px; }
+  .pill { display:inline-block; padding: 1px 6px; border-radius: 10px; font-size: 7.6pt; background: var(--soft); color: var(--brand); border: 1px solid var(--brand3); }
+  .key { font-size: 7.8pt; color: var(--muted); }
+  .key i { display:inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: -1px; margin: 0 3px 0 8px; }
+</style>
+</head>
+<body>
+
+<!-- ============================ PAGE 1 ============================ -->
+<section class="page">
+  <h1>What Aurel should build with AI</h1>
+  <div class="meta">Strategy memo · To: COO · From: AI Product Manager · 23 October 2026</div>
+  <div class="gloss"><b>Terms.</b> The <b>reservations desk</b> is the 22-person team that answers every guest contact before arrival (the brief calls it the CRO). The <b>PMS</b> is the hotel's booking system. A <b>trace</b> is a to-do in the PMS sent to a hotel department with a due date. <b>AI agent</b> is the software; <b>agent</b> on its own is a person on the desk.</div>
+
+  <h2><span class="n">1</span>Our read of the problem and the data</h2>
+  <p>Two failures, both measurable, both in the band between a guest's first message and their arrival.</p>
+
+  <figure>
+  <svg viewBox="0 0 700 118" role="img" aria-label="Guest journey with two failure points">
+    <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#6b665e"/></marker></defs>
+    <line x1="20" y1="58" x2="690" y2="58" stroke="#ddd8cf" stroke-width="2"/>
+    <!-- stages -->
+    <g>
+      <circle cx="60" cy="58" r="5" fill="#4f7a5f"/><text x="60" y="80" text-anchor="middle" class="bold">Asks</text><text x="60" y="91" text-anchor="middle" class="small">"Room 4–7 June, how much?"</text>
+      <circle cx="200" cy="58" r="5" fill="#4f7a5f"/><text x="200" y="80" text-anchor="middle" class="bold">Books</text><text x="200" y="91" text-anchor="middle" class="small">direct, OTA or advisor</text>
+      <circle cx="340" cy="58" r="5" fill="#4f7a5f"/><text x="340" y="80" text-anchor="middle" class="bold">Waits to arrive</text><text x="340" y="91" text-anchor="middle" class="small">changes dates, asks for a cot, a transfer</text>
+      <circle cx="500" cy="58" r="5" fill="#4f7a5f"/><text x="500" y="80" text-anchor="middle" class="bold">Arrives</text><text x="500" y="91" text-anchor="middle" class="small">front office reads the notes box</text>
+      <circle cx="640" cy="58" r="5" fill="#4f7a5f"/><text x="640" y="80" text-anchor="middle" class="bold">Reviews</text><text x="640" y="91" text-anchor="middle" class="small">"communication before arrival" #2</text>
+    </g>
+    <!-- owners -->
+    <rect x="20" y="104" width="420" height="10" rx="3" fill="#e4ece6"/><text x="230" y="112" text-anchor="middle" class="small" style="fill:#1f3d2b">Reservations desk owns this band</text>
+    <rect x="446" y="104" width="244" height="10" rx="3" fill="#f0e6d0"/><text x="568" y="112" text-anchor="middle" class="small" style="fill:#7a5a10">Hotel teams own this band</text>
+    <!-- failures -->
+    <g>
+      <rect x="10" y="4" width="200" height="40" rx="5" fill="#fbeeed" stroke="#b3362f"/>
+      <text x="20" y="19" class="bold" style="fill:#b3362f">Failure 1 · We answer too slowly</text>
+      <text x="20" y="31" class="small">Email waits 9 h (26 h at weekends).</text>
+      <text x="20" y="41" class="small">Within 1 h: 34% book. After 24 h: 9%.</text>
+      <line x1="60" y1="44" x2="60" y2="52" stroke="#b3362f" marker-end="url(#ar)"/>
+    </g>
+    <g>
+      <rect x="380" y="4" width="240" height="40" rx="5" fill="#fbeeed" stroke="#b3362f"/>
+      <text x="390" y="19" class="bold" style="fill:#b3362f">Failure 2 · We don't deliver what we promise</text>
+      <text x="390" y="31" class="small">Requests go in a free-text notes box, read on arrival day.</text>
+      <text x="390" y="41" class="small">23% not done. 1 in 40 is an allergy, medical or access need.</text>
+      <line x1="500" y1="44" x2="500" y2="52" stroke="#b3362f" marker-end="url(#ar)"/>
+    </g>
+  </svg>
+  </figure>
+
+  <div class="tiles">
+    <div class="tile bad"><div class="v">9 h <small>/ 26 h</small></div><div class="l">median email reply, weekday / weekend</div></div>
+    <div class="tile"><div class="v">34% <small>vs 9%</small></div><div class="l">book if answered within 1 h vs after 24 h</div></div>
+    <div class="tile bad"><div class="v">224<small> / week</small></div><div class="l">promises not kept (23% of 970 requests)</div></div>
+    <div class="tile"><div class="v">EUR 1.2M</div><div class="l">a year, for each 1 point of enquiry conversion</div></div>
+  </div>
+
+  <figure>
+  <svg viewBox="0 0 700 132" role="img" aria-label="Why the desk is slow">
+    <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#4f7a5f"/></marker></defs>
+    <!-- flow -->
+    <rect x="0" y="36" width="104" height="48" rx="6" fill="#f4f1ea" stroke="#ddd8cf"/><text x="52" y="55" text-anchor="middle" class="bold">770 contacts a day</text><text x="52" y="68" text-anchor="middle" class="small">48 an hour</text>
+    <line x1="104" y1="60" x2="122" y2="60" stroke="#4f7a5f" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <rect x="124" y="36" width="112" height="48" rx="6" fill="#f4f1ea" stroke="#ddd8cf"/><text x="180" y="52" text-anchor="middle" class="bold">4 inboxes</text><text x="180" y="65" text-anchor="middle" class="small">email 58% · phone 24%</text><text x="180" y="76" text-anchor="middle" class="small">WhatsApp 11% · OTA 7%</text>
+    <line x1="236" y1="60" x2="254" y2="60" stroke="#4f7a5f" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <rect x="256" y="36" width="108" height="48" rx="6" fill="#f4f1ea" stroke="#ddd8cf"/><text x="310" y="52" text-anchor="middle" class="bold">~14 agents on shift</text><text x="310" y="65" text-anchor="middle" class="small">one contact every 8 min</text><text x="310" y="76" text-anchor="middle" class="small">no gaps all day</text>
+    <line x1="364" y1="60" x2="372" y2="60" stroke="#4f7a5f" stroke-width="1.5" marker-end="url(#ar2)"/>
+    <!-- causes -->
+    <g>
+      <rect x="374" y="6" width="150" height="26" rx="5" fill="#fff" stroke="#b8860b"/><text x="382" y="17" class="bold">2 h of every shift is lookup</text><text x="382" y="27" class="small">9 hotels × 140+ rules, in documents</text>
+      <rect x="374" y="36" width="150" height="26" rx="5" fill="#fff" stroke="#b8860b"/><text x="382" y="47" class="bold">Phone is answered live</text><text x="382" y="57" class="small">so email always waits</text>
+      <rect x="374" y="66" width="150" height="26" rx="5" fill="#fff" stroke="#b8860b"/><text x="382" y="77" class="bold">Groups: 3% of contacts, 16% of work</text><text x="382" y="87" class="small">45 min each; need a sales decision</text>
+      <rect x="374" y="96" width="150" height="26" rx="5" fill="#fff" stroke="#b8860b"/><text x="382" y="107" class="bold">4 in 10 agents leave each year</text><text x="382" y="117" class="small">6 weeks to ramp; team always partly new</text>
+    </g>
+    <!-- capacity bar -->
+    <text x="540" y="20" class="bold">Hours a week</text>
+    <rect x="540" y="28" width="150" height="14" rx="3" fill="#e4ece6"/><text x="696" y="39" class="small" text-anchor="end"></text>
+    <rect x="540" y="28" width="136" height="14" rx="3" fill="#1f3d2b"/>
+    <text x="546" y="39" class="white" style="font-size:7.6px">work needed ≈ 750</text>
+    <text x="540" y="56" class="small">available ≈ 825 · desk is ~90% busy</text>
+    <text x="540" y="66" class="small">before breaks, training, sickness</text>
+    <rect x="540" y="78" width="150" height="46" rx="5" fill="#f4f1ea"/>
+    <text x="548" y="92" class="bold">Root cause: no slack</text>
+    <text x="548" y="104" class="small">A quarter of the day finding information,</text>
+    <text x="548" y="114" class="small">every contact treated as equal, and no</text>
+    <text x="548" y="124" class="small">spare hours to absorb it.</text>
+  </svg>
+  </figure>
+
+  <h2><span class="n">2</span>Who we are solving for, and why</h2>
+  <figure>
+  <svg viewBox="0 0 700 120" role="img" aria-label="Who we solve for">
+    <!-- centre -->
+    <rect x="270" y="30" width="160" height="60" rx="8" fill="#1f3d2b"/>
+    <text x="350" y="50" text-anchor="middle" class="white bold" style="font-size:9.5px">Reservations agent</text>
+    <text x="350" y="63" text-anchor="middle" class="white" style="font-size:7.6px">primary user · one contact every 8 min</text>
+    <text x="350" y="75" text-anchor="middle" class="white" style="font-size:7.6px">If they answer in minutes, conversion moves.</text>
+    <text x="350" y="85" text-anchor="middle" class="white" style="font-size:7.6px">If their requests become tasks, the 23% moves.</text>
+    <!-- satellites -->
+    <g>
+      <rect x="6" y="6" width="190" height="42" rx="6" fill="#f4f1ea"/><text x="14" y="20" class="bold">Guest</text><text x="14" y="31" class="small">Waits hours; arrives to find the cot missing.</text><text x="14" y="41" class="small">Who we serve, reached through the agent.</text>
+      <line x1="196" y1="27" x2="270" y2="45" stroke="#b7cdbd" stroke-width="1.5"/>
+      <rect x="6" y="72" width="190" height="42" rx="6" fill="#f4f1ea"/><text x="14" y="86" class="bold">Hotel departments</text><text x="14" y="97" class="small">Learn of requests on arrival morning, from a notes box.</text><text x="14" y="107" class="small">Want a task with an owner and a date.</text>
+      <line x1="196" y1="93" x2="270" y2="75" stroke="#b7cdbd" stroke-width="1.5"/>
+      <rect x="504" y="6" width="190" height="42" rx="6" fill="#f4f1ea"/><text x="512" y="20" class="bold">Reservations manager</text><text x="512" y="31" class="small">Exceptions arrive mixed into 447 emails a day.</text><text x="512" y="41" class="small">Wants decisions with context, same day.</text>
+      <line x1="504" y1="27" x2="430" y2="45" stroke="#b7cdbd" stroke-width="1.5"/>
+      <rect x="504" y="72" width="190" height="42" rx="6" fill="#f4f1ea"/><text x="512" y="86" class="bold">COO</text><text x="512" y="97" class="small">Cost and competitiveness. Capacity and conversion</text><text x="512" y="107" class="small">are the levers; headcount is the result.</text>
+      <line x1="504" y1="93" x2="430" y2="75" stroke="#b7cdbd" stroke-width="1.5"/>
+    </g>
+  </svg>
+  </figure>
+  <h2><span class="n">3</span>Vision: two to three years</h2>
+  <p><b>An answer within the hour, on any channel, at any time. Every promise made before arrival is kept.</b></p>
+  <figure>
+  <svg viewBox="0 0 700 150" role="img" aria-label="Three-year roadmap">
+    <!-- column headers -->
+    <rect x="90" y="0" width="196" height="18" rx="4" fill="#1f3d2b"/><text x="188" y="12" text-anchor="middle" class="white bold">Year 1 · these two quarters</text>
+    <rect x="292" y="0" width="200" height="18" rx="4" fill="#4f7a5f"/><text x="392" y="12" text-anchor="middle" class="white bold">Year 2</text>
+    <rect x="498" y="0" width="202" height="18" rx="4" fill="#b7cdbd"/><text x="599" y="12" text-anchor="middle" class="bold">Year 3</text>
+    <!-- rows -->
+    <g>
+      <text x="0" y="36" class="bold">Channels</text>
+      <rect x="90" y="24" width="196" height="26" rx="4" fill="#f4f1ea"/><text x="96" y="35" class="small">Email Q1 · WhatsApp end Q1</text><text x="96" y="45" class="small">OTA messaging Q2 (partner approval)</text>
+      <rect x="292" y="24" width="200" height="26" rx="4" fill="#f4f1ea"/><text x="298" y="35" class="small">+ website chat</text><text x="298" y="45" class="small">+ phone: AI agent helps the person on the call</text>
+      <rect x="498" y="24" width="202" height="26" rx="4" fill="#f4f1ea"/><text x="504" y="35" class="small">+ phone handled by the AI agent</text><text x="504" y="45" class="small">for simple questions</text>
+
+      <text x="0" y="68" class="bold">Autonomy</text>
+      <rect x="90" y="56" width="196" height="26" rx="4" fill="#f4f1ea"/><text x="96" y="67" class="small">Policy questions sent alone from the first live week</text><text x="96" y="77" class="small">Everything else drafted; a person approves</text>
+      <rect x="292" y="56" width="200" height="26" rx="4" fill="#f4f1ea"/><text x="298" y="67" class="small">+ price quotes and within-rules changes sent alone</text><text x="298" y="77" class="small">24/7 for those types</text>
+      <rect x="498" y="56" width="202" height="26" rx="4" fill="#f4f1ea"/><text x="504" y="67" class="small">+ simple direct bookings at published prices</text><text x="504" y="77" class="small">via payment link; proactive pre-arrival outreach</text>
+
+      <text x="0" y="100" class="bold">Hotels</text>
+      <rect x="90" y="88" width="196" height="26" rx="4" fill="#f4f1ea"/><text x="96" y="99" class="small">Every request is a trace</text><text x="96" y="109" class="small">with owner and due date</text>
+      <rect x="292" y="88" width="200" height="26" rx="4" fill="#f4f1ea"/><text x="298" y="99" class="small">Hotels close traces;</text><text x="298" y="109" class="small">guest told automatically</text>
+      <rect x="498" y="88" width="202" height="26" rx="4" fill="#f4f1ea"/><text x="504" y="99" class="small">"Promises kept" managed</text><text x="504" y="109" class="small">as a number across all 9 hotels</text>
+
+      <text x="0" y="132" class="bold">Team</text>
+      <rect x="90" y="120" width="196" height="26" rx="4" fill="#f4f1ea"/><text x="96" y="131" class="small">Headcount reviewed end Q1, decided on Q2 data</text><text x="96" y="141" class="small">AI agent takes the lookup work</text>
+      <rect x="292" y="120" width="200" height="26" rx="4" fill="#f4f1ea"/><text x="298" y="131" class="small">Team size decided on measured hours;</text><text x="298" y="141" class="small">roles shift to judgement and relationships</text>
+      <rect x="498" y="120" width="202" height="26" rx="4" fill="#f4f1ea"/><text x="504" y="131" class="small">A guest-success team,</text><text x="504" y="141" class="small">not a queue</text>
+    </g>
+  </svg>
+  </figure>
+
+  <p style="margin-top:6px"><b>Why not every channel in three months.</b> Writing the code is fast now. The gates are not code.</p>
+  <figure>
+  <svg viewBox="0 0 700 76" role="img" aria-label="Channel readiness timeline">
+    <line x1="30" y1="22" x2="690" y2="22" stroke="#ddd8cf" stroke-width="2"/>
+    <g>
+      <circle cx="70" cy="22" r="6" fill="#1f3d2b"/><text x="70" y="10" text-anchor="middle" class="bold">Q1</text>
+      <text x="70" y="40" text-anchor="middle" class="bold">Email · 58%</text><text x="70" y="51" text-anchor="middle" class="small">mailbox API is standard</text>
+      <circle cx="210" cy="22" r="6" fill="#1f3d2b"/><text x="210" y="10" text-anchor="middle" class="bold">end Q1</text>
+      <text x="210" y="40" text-anchor="middle" class="bold">WhatsApp · 11%</text><text x="210" y="51" text-anchor="middle" class="small">Meta business verification,</text><text x="210" y="61" text-anchor="middle" class="small">1 to 4 weeks</text>
+      <circle cx="350" cy="22" r="6" fill="#4f7a5f"/><text x="350" y="10" text-anchor="middle" class="bold">Q2</text>
+      <text x="350" y="40" text-anchor="middle" class="bold">OTA messaging · 7%</text><text x="350" y="51" text-anchor="middle" class="small">Booking.com and Expedia partner</text><text x="350" y="61" text-anchor="middle" class="small">APIs need approval</text>
+      <circle cx="500" cy="22" r="6" fill="#b7cdbd"/><text x="500" y="10" text-anchor="middle" class="bold">Year 2</text>
+      <text x="500" y="40" text-anchor="middle" class="bold">Phone · 24%</text><text x="500" y="51" text-anchor="middle" class="small">live answer, recording consent,</text><text x="500" y="61" text-anchor="middle" class="small">no transcripts, no engineer capacity</text>
+      <circle cx="640" cy="22" r="6" fill="#b7cdbd"/><text x="640" y="10" text-anchor="middle" class="bold">Year 2</text>
+      <text x="640" y="40" text-anchor="middle" class="bold">Website chat</text><text x="640" y="51" text-anchor="middle" class="small">new channel; not where</text><text x="640" y="61" text-anchor="middle" class="small">the problem is</text>
+    </g>
+  </svg>
+  <figcaption>On every channel, sending alone is earned by being right on hundreds of checked messages. That takes real traffic and weeks, not code.</figcaption>
+  </figure>
+  <div class="foot">Aurel Hotels · Strategy memo · page 1 of 3</div>
+</section>
+
+<!-- ============================ PAGE 2 ============================ -->
+<section class="page">
+  <h2 style="margin-top:0"><span class="n">4</span>The one bet for these two quarters: the Aurel Reservations AI Agent</h2>
+  <p><b>Sort every message by type, then send each type to the cheapest safe handler.</b> Documents for policy questions. The PMS for prices. People for judgement calls. Traces for the hotels.</p>
+  <figure>
+  <svg viewBox="0 0 700 212" role="img" aria-label="Sort then route">
+    <defs><marker id="ar3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#6b665e"/></marker></defs>
+    <!-- inbound -->
+    <rect x="0" y="80" width="78" height="46" rx="6" fill="#f4f1ea" stroke="#ddd8cf"/><text x="39" y="98" text-anchor="middle" class="bold">Email</text><text x="39" y="110" text-anchor="middle" class="bold">WhatsApp</text><text x="39" y="121" text-anchor="middle" class="small">76% of contacts</text>
+    <line x1="78" y1="103" x2="98" y2="103" stroke="#6b665e" marker-end="url(#ar3)"/>
+    <!-- agent -->
+    <rect x="100" y="60" width="150" height="86" rx="8" fill="#1f3d2b"/>
+    <text x="175" y="76" text-anchor="middle" class="white bold" style="font-size:9.5px">AI agent</text>
+    <text x="108" y="92" class="white" style="font-size:7.8px">1 · Sorts by type (an agent can override)</text>
+    <text x="108" y="105" class="white" style="font-size:7.8px">2 · Finds the booking in the PMS</text>
+    <text x="108" y="118" class="white" style="font-size:7.8px">3 · Flags allergy / medical / access data</text>
+    <text x="108" y="131" class="white" style="font-size:7.8px">4 · Removes card numbers</text>
+    <!-- fan-out -->
+    <g stroke="#6b665e" fill="none">
+      <path d="M250,103 C270,103 270,14 290,14" marker-end="url(#ar3)"/>
+      <path d="M250,103 C270,103 270,44 290,44" marker-end="url(#ar3)"/>
+      <path d="M250,103 C270,103 270,74 290,74" marker-end="url(#ar3)"/>
+      <path d="M250,103 C270,103 270,104 290,104" marker-end="url(#ar3)"/>
+      <path d="M250,103 C270,103 270,134 290,134" marker-end="url(#ar3)"/>
+      <path d="M250,103 C270,103 270,164 290,164" marker-end="url(#ar3)"/>
+      <path d="M250,103 C270,103 270,194 290,194" marker-end="url(#ar3)"/>
+    </g>
+    <!-- rows: type | handler | approval -->
+    <g>
+      <!-- helper: y centers 14,44,74,104,134,164,194 -->
+      <rect x="292" y="3" width="118" height="22" rx="4" fill="#f4f1ea"/><text x="298" y="12" class="bold">Policy question · 12%</text><text x="298" y="21" class="small">parking, pets, check-in time</text>
+      <rect x="416" y="3" width="150" height="22" rx="4" fill="#fff" stroke="#ddd8cf"/><text x="422" y="12" class="small">Answer from that hotel's</text><text x="422" y="21" class="small">policy documents</text>
+      <rect x="572" y="3" width="128" height="22" rx="4" fill="#1f3d2b"/><text x="636" y="12" text-anchor="middle" class="white bold" style="font-size:7.8px">SENT ON ITS OWN</text><text x="636" y="21" text-anchor="middle" class="white" style="font-size:7px">from the first live week (week 3)</text>
+
+      <rect x="292" y="33" width="118" height="22" rx="4" fill="#f4f1ea"/><text x="298" y="42" class="bold">Price / availability · 31%</text><text x="298" y="51" class="small">"do you have a room, how much"</text>
+      <rect x="416" y="33" width="150" height="22" rx="4" fill="#fff" stroke="#ddd8cf"/><text x="422" y="42" class="small">Today's price from the PMS,</text><text x="422" y="51" class="small">terms from documents. Never discounts.</text>
+      <rect x="572" y="33" width="128" height="22" rx="4" fill="#e4ece6"/><text x="636" y="42" text-anchor="middle" class="bold" style="font-size:7.8px">Draft → agent approves</text><text x="636" y="51" text-anchor="middle" class="small">one click</text>
+
+      <rect x="292" y="63" width="118" height="22" rx="4" fill="#f4f1ea"/><text x="298" y="72" class="bold">Booking change · 22%</text><text x="298" y="81" class="small">dates, room, guests</text>
+      <rect x="416" y="63" width="150" height="22" rx="4" fill="#fff" stroke="#ddd8cf"/><text x="422" y="72" class="small">Within rules: prepares the change in PMS.</text><text x="422" y="81" class="small">Outside rules → reservations manager.</text>
+      <rect x="572" y="63" width="128" height="22" rx="4" fill="#e4ece6"/><text x="636" y="72" text-anchor="middle" class="bold" style="font-size:7.8px">Agent confirms the write</text><text x="636" y="81" text-anchor="middle" class="small">manager for exceptions</text>
+
+      <rect x="292" y="93" width="118" height="22" rx="4" fill="#f4f1ea"/><text x="298" y="102" class="bold">Special request · 18%</text><text x="298" y="111" class="small">cot, transfer, early check-in</text>
+      <rect x="416" y="93" width="150" height="22" rx="4" fill="#fff" stroke="#ddd8cf"/><text x="422" y="102" class="small">One trace per request, owner + due date.</text><text x="422" y="111" class="small">Allergy / medical → restricted trace.</text>
+      <rect x="572" y="93" width="128" height="22" rx="4" fill="#e4ece6"/><text x="636" y="102" text-anchor="middle" class="bold" style="font-size:7.8px">Agent approves reply</text><text x="636" y="111" text-anchor="middle" class="small">"logged, hotel will confirm"</text>
+
+      <rect x="292" y="123" width="118" height="22" rx="4" fill="#f4f1ea"/><text x="298" y="132" class="bold">Cancellation / refund · 9%</text><text x="298" y="141" class="small">within or outside the rules</text>
+      <rect x="416" y="123" width="150" height="22" rx="4" fill="#fff" stroke="#ddd8cf"/><text x="422" y="132" class="small">Within rules: drafts confirmation.</text><text x="422" y="141" class="small">Outside: kind holding reply → manager.</text>
+      <rect x="572" y="123" width="128" height="22" rx="4" fill="#e4ece6"/><text x="636" y="132" text-anchor="middle" class="bold" style="font-size:7.8px">Agent approves</text><text x="636" y="141" text-anchor="middle" class="small">manager decides exceptions, same day</text>
+
+      <rect x="292" y="153" width="118" height="22" rx="4" fill="#f4f1ea"/><text x="298" y="162" class="bold">Group / event · 3%</text><text x="298" y="171" class="small">8+ rooms, weddings, meetings</text>
+      <rect x="416" y="153" width="150" height="22" rx="4" fill="#fff" stroke="#ddd8cf"/><text x="422" y="162" class="small">Details attached, passed on.</text><text x="422" y="171" class="small">Nothing else.</text>
+      <rect x="572" y="153" width="128" height="22" rx="4" fill="#f0e6d0"/><text x="636" y="162" text-anchor="middle" class="bold" style="font-size:7.8px">→ Groups specialists</text><text x="636" y="171" text-anchor="middle" class="small">in the desk; they decide</text>
+
+      <rect x="292" y="183" width="118" height="22" rx="4" fill="#f4f1ea"/><text x="298" y="192" class="bold">Card details · rare</text><text x="298" y="201" class="small">guest emails a card number</text>
+      <rect x="416" y="183" width="150" height="22" rx="4" fill="#fff" stroke="#ddd8cf"/><text x="422" y="192" class="small">Removed before anyone sees it.</text><text x="422" y="201" class="small">Payment-gateway link sent.</text>
+      <rect x="572" y="183" width="128" height="22" rx="4" fill="#e4ece6"/><text x="636" y="192" text-anchor="middle" class="bold" style="font-size:7.8px">Automatic</text><text x="636" y="201" text-anchor="middle" class="small">nothing stored</text>
+    </g>
+  </svg>
+  <figcaption>Rules it always follows: live PMS prices only · never confirms what the hotel has not · never discounts (rate parity) · never decides a refund outside the rules · sensitive data only in a restricted trace · each type earns the right to send alone when agents stop correcting it. Alongside, three work changes that need no software: enquiries answered first; phone and email shifts split by hour; traces compulsory with a weekly "promises kept" number per hotel.</figcaption>
+  </figure>
+
+  <figure>
+  <svg viewBox="0 0 700 168" role="img" aria-label="Expected impact">
+    <text x="0" y="11" class="bold" style="font-size:9.5px">Expected impact · today → end of Q2</text>
+    <text x="0" y="23" class="small">Dark bar: realistic case. Light green: cautious case, where the AI agent delivers half of its share. Grey: today.</text>
+    <!-- metric 1: hours -->
+    <g transform="translate(0,34)">
+      <text x="0" y="10" class="bold">Hours of work a week</text>
+      <rect x="0" y="16" width="200" height="10" rx="2" fill="#ddd8cf"/><text x="205" y="25" class="small">750 today</text>
+      <rect x="0" y="30" width="164" height="10" rx="2" fill="#b7cdbd"/><text x="169" y="39" class="small mut">~615 cautious (18% less)</text>
+      <rect x="0" y="44" width="128" height="10" rx="2" fill="#1f3d2b"/><text x="133" y="53" class="bold" style="font-size:7.8px">~480 realistic (36% less)</text>
+      <text x="0" y="72" class="small bold">Where the ~270 saved hours come from (realistic case)</text>
+            <text x="0" y="83" class="small">Quotes drafted with the live price 106 h · Changes prepared 60 h</text>
+      <text x="0" y="93" class="small">Traces created 37 h · Policy-only answered alone 17 h</text>
+      <text x="0" y="103" class="small">Call notes assisted 30 h · Cancellations drafted 18 h</text>
+      <text x="0" y="113" class="small">Groups (122 h) need a sales decision; no saving counted.</text>
+    </g>
+    <!-- metric 2: reply time + promises -->
+    <g transform="translate(300,34)">
+      <text x="0" y="10" class="bold">Email reply, weekday median</text>
+      <rect x="0" y="16" width="150" height="10" rx="2" fill="#ddd8cf"/><text x="155" y="25" class="small">9 h today</text>
+      <rect x="0" y="30" width="17" height="10" rx="2" fill="#b7cdbd"/><text x="22" y="39" class="small mut">under 45 min cautious</text>
+      <rect x="0" y="44" width="8" height="10" rx="2" fill="#1f3d2b"/><text x="13" y="53" class="bold" style="font-size:7.8px">under 30 min realistic</text>
+      <text x="0" y="72" class="bold">Requests not delivered</text>
+      <rect x="0" y="78" width="150" height="10" rx="2" fill="#ddd8cf"/><text x="155" y="87" class="small">23% today</text>
+      <rect x="0" y="92" width="33" height="10" rx="2" fill="#b7cdbd"/><text x="38" y="101" class="small mut">under 5% cautious</text>
+      <rect x="0" y="106" width="20" height="10" rx="2" fill="#1f3d2b"/><text x="25" y="115" class="bold" style="font-size:7.8px">under 3% realistic</text>
+    </g>
+    <!-- metric 3: money -->
+    <g transform="translate(500,34)">
+      <rect x="0" y="0" width="200" height="124" rx="6" fill="#f4f1ea"/>
+      <text x="10" y="16" class="bold">Money a year</text>
+      <text x="10" y="36" class="bold" style="font-size:14px; fill:#1f3d2b">EUR 5.7M to 11M</text>
+      <text x="10" y="52" class="small">+5 to +10 points conversion on</text>
+      <text x="10" y="62" class="small">~1,270 text enquiries a week × EUR 1,350,</text>
+      <text x="10" y="72" class="small">plus 18% OTA commission saved on them.</text>
+      <text x="10" y="88" class="small">Fewer broken promises: real, not priced.</text>
+      <text x="10" y="102" class="small">Headcount: no reduction planned;</text>
+      <text x="10" y="112" class="small">decided on measured hours.</text>
+      <text x="10" y="124" class="bold" style="font-size:7.8px; fill:#1f3d2b">Revenue is the prize, not headcount.</text>
+    </g>
+  </svg>
+  </figure>
+  <h2><span class="n">5</span>What we will not build</h2>
+  <div class="cards">
+    <div class="card x"><b>A bot that books and takes payment alone</b><span class="why">The PMS cannot take a card in a message. We need Q1 approval data before anything books unsupervised.</span></div>
+    <div class="card x"><b>Phone or voice</b><span class="why">Live answers in seconds with no approve step, recording consent, no transcripts today, and no engineer capacity. Year 2, as assist first.</span></div>
+    <div class="card x"><b>Discounting or price matching</b><span class="why">Prices are the same everywhere by agreement with the OTAs, and the PMS cannot discount. Nothing to negotiate.</span></div>
+    <div class="card x"><b>Group pricing</b><span class="why">The groups specialists own it. The AI agent only passes groups on with the details.</span></div>
+    <div class="card x"><b>A website chatbot</b><span class="why">A new channel. Not where the problem is. Year 2 once the AI agent is trusted.</span></div>
+  </div>
+  <div class="foot">Aurel Hotels · Strategy memo · page 2 of 3</div>
+</section>
+
+<!-- ============================ PAGE 3 ============================ -->
+<section class="page">
+  <h2 style="margin-top:0"><span class="n">6</span>Where AI is the wrong answer</h2>
+  <figure>
+  <svg viewBox="0 0 700 196" role="img" aria-label="Where AI is the wrong answer" style="font-size:9px">
+<defs><marker id="ar4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#4f7a5f"/></marker></defs>
+<text x="0" y="10" class="small bold" style="letter-spacing:.04em">PROBLEM</text><text x="246" y="10" class="small bold" style="letter-spacing:.04em">WHY NOT AI</text><text x="440" y="10" class="small bold" style="letter-spacing:.04em">WHAT FIXES IT</text>
+<rect x="0" y="16" width="232" height="30" rx="4" fill="#f4f1ea"/><text x="8" y="28" class="bold" style="font-size:9px">Groups: 16% of the work, 3% of contacts</text><text x="8" y="39" style="font-size:8px;fill:#6b665e">45 min each, pricing and contracting</text>
+<rect x="246" y="16" width="180" height="30" rx="4" fill="#fff" stroke="#ddd8cf"/>
+<text x="254" y="34.0" style="font-size:8px">Pricing a group is a judgement call</text>
+<line x1="426" y1="31.0" x2="438" y2="31.0" stroke="#4f7a5f" marker-end="url(#ar4)"/>
+<rect x="440" y="16" width="260" height="30" rx="4" fill="#e4ece6"/><text x="448" y="28" style="font-size:8px">Straight to the groups specialists with the details.</text><text x="448" y="39" style="font-size:8px">The AI agent only routes; no time saving claimed.</text>
+<rect x="0" y="52" width="232" height="30" rx="4" fill="#f4f1ea"/><text x="8" y="64" class="bold" style="font-size:9px">Email stuck behind the phone</text><text x="8" y="75" style="font-size:8px;fill:#6b665e">phones ring, emails lose</text>
+<rect x="246" y="52" width="180" height="30" rx="4" fill="#fff" stroke="#ddd8cf"/>
+<text x="254" y="70.0" style="font-size:8px">It is a roster problem</text>
+<line x1="426" y1="67.0" x2="438" y2="67.0" stroke="#4f7a5f" marker-end="url(#ar4)"/>
+<rect x="440" y="52" width="260" height="30" rx="4" fill="#e4ece6"/><text x="448" y="64" style="font-size:8px">Split phone and email shifts by hour.</text><text x="448" y="75" style="font-size:8px">Answer room enquiries first.</text>
+<rect x="0" y="88" width="232" height="30" rx="4" fill="#f4f1ea"/><text x="8" y="100" class="bold" style="font-size:9px">23% of promises broken</text><text x="8" y="111" style="font-size:8px;fill:#6b665e">notes box read on arrival day</text>
+<rect x="246" y="88" width="180" height="30" rx="4" fill="#fff" stroke="#ddd8cf"/>
+<text x="254" y="100" style="font-size:8px">The PMS already has to-dos with owners</text><text x="254" y="111" style="font-size:8px">and dates (traces). Hotels don't use them.</text>
+<line x1="426" y1="103.0" x2="438" y2="103.0" stroke="#4f7a5f" marker-end="url(#ar4)"/>
+<rect x="440" y="88" width="260" height="30" rx="4" fill="#e4ece6"/><text x="448" y="100" style="font-size:8px">Log requests only as traces. Daily list per department.</text><text x="448" y="111" style="font-size:8px">Weekly "promises kept" % per hotel. AI agent creates the trace.</text>
+<rect x="0" y="124" width="232" height="30" rx="4" fill="#f4f1ea"/><text x="8" y="136" class="bold" style="font-size:9px">A refund because a parent is in hospital</text><text x="8" y="147" style="font-size:8px;fill:#6b665e">non-refundable booking, compassionate case</text>
+<rect x="246" y="124" width="180" height="30" rx="4" fill="#fff" stroke="#ddd8cf"/>
+<text x="254" y="136" style="font-size:8px">A person with authority should</text><text x="254" y="147" style="font-size:8px">decide, and be seen to.</text>
+<line x1="426" y1="139.0" x2="438" y2="139.0" stroke="#4f7a5f" marker-end="url(#ar4)"/>
+<rect x="440" y="124" width="260" height="30" rx="4" fill="#e4ece6"/><text x="448" y="136" style="font-size:8px">Manager queue, decided the same day.</text><text x="448" y="147" style="font-size:8px">The AI agent drafts only the kind holding reply.</text>
+<rect x="0" y="160" width="232" height="30" rx="4" fill="#f4f1ea"/><text x="8" y="172" class="bold" style="font-size:9px">Headcount as the goal</text><text x="8" y="183" style="font-size:8px;fill:#6b665e">team reads it as "AI is replacing us"</text>
+<rect x="246" y="160" width="180" height="30" rx="4" fill="#fff" stroke="#ddd8cf"/>
+<text x="254" y="172" style="font-size:8px">A tool built to cut the team</text><text x="254" y="183" style="font-size:8px">is resisted by the team.</text>
+<line x1="426" y1="175.0" x2="438" y2="175.0" stroke="#4f7a5f" marker-end="url(#ar4)"/>
+<rect x="440" y="160" width="260" height="30" rx="4" fill="#e4ece6"/><text x="448" y="172" style="font-size:8px">Target speed and kept promises. Headcount follows:</text><text x="448" y="183" style="font-size:8px">no reduction planned; replacing leavers decided on measured hours.</text>
+</svg>
+  </figure>
+
+  <h2><span class="n">7</span>Reply to the COO</h2>
+  <div class="coo">
+    <div>An AI agent taking bookings on every channel in 3 months</div>
+    <div><b>Yes to the AI agent.</b> Email in Q1, WhatsApp by end Q1, OTA messaging in Q2, phone in year 2. Not because code is slow, but because channel access, GDPR sign-off and proof of safety take real weeks, and two engineers can only build so much. Policy questions are answered alone from the first live week, after two weeks of shadow mode. Everything else is approved by a person until the AI agent earns it. The last bot was switched off for one bad promise; this one never confirms what the hotel has not.</div>
+    <div>24/7</div>
+    <div>By end of Q1, within the hour in opening hours. By Q2, around the clock for the types that send alone. Year 2 for the rest.</div>
+    <div>Headcount down 40% by year end</div>
+    <div><b>The numbers don't support it.</b> Thirteen people would be at least 99% busy even if the AI agent delivers everything I estimate, which is today's problem again. I am not planning a reduction. Nine people leave every year anyway; whether we replace them is decided on measured hours at the end of Q1 and again at the end of Q2, not now. Headcount is worth about EUR 0.4M a year at most (9 people × EUR 45k). The conversion gap, 34% versus 9%, is worth EUR 5M to 9M. That is the prize.</div>
+    <div>Tell me the plan</div>
+    <div>This memo, the PRD with the AI agent's behaviour spec and metrics, and a working prototype. <b>From you:</b> the three work changes in section 4; a named sponsor at each hotel for traces, with the "promises kept" number in your weekly review; and a message to the team in week one: the target is speed and kept promises, and nobody is being replaced by the tool they are training.</div>
+  </div>
+
+  <p class="key" style="margin-top:10px"><b>Assumptions written down.</b> 22 people × 37.5 productive hours = 825 h a week; 2 managers, 3 groups and events specialists, 4 seniors, 13 agents; one shared queue; desk open 07:00–23:00, seven days. Average booking EUR 1,350 (three nights × EUR 450); loaded cost per agent EUR 45k. Handle-time reductions behind the impact figures are estimates to be measured in shadow mode. Email and WhatsApp APIs available; OTA partner APIs need approval. PMS traces accept a department, due date and restricted flag; if not, sensitive detail stays in our system with a pointer. Two engineers for two quarters (~52 engineer-weeks) cover PMS integration and traces, email, WhatsApp, the AI agent, the desk, guardrails and a pilot, with a five-week buffer.</p>
+
+  <div class="foot">Aurel Hotels · Strategy memo · page 3 of 3</div>
+</section>
+
+</body>
+</html>

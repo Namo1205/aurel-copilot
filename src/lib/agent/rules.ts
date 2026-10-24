@@ -1,5 +1,5 @@
 // Rule-based analysis engine. Runs with no API key and is fully deterministic.
-// It encodes the same behaviour spec the Claude engine is prompted with, so the
+// It encodes the same behaviour spec the Gemini engine is prompted with, so the
 // two modes can be diffed on the same inbox.
 
 import {
@@ -19,7 +19,8 @@ import {
   type RateQuote,
 } from "@/lib/pms";
 import type { InboundMessage } from "@/lib/inbox/seed";
-import { AgentProposal, type Category, type ProposedAction } from "./schema";
+import { AgentProposal, type AutoSend, type Category, type ProposedAction } from "./schema";
+import { TEMPLATES, topicCheck } from "./templates";
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
@@ -145,6 +146,7 @@ interface Intents {
   parking: boolean;
   pets: boolean;
   faqOther: boolean;
+  lateCheckOut: boolean;
   repeat: boolean;
 }
 
@@ -175,7 +177,10 @@ function detect(text: string): Intents {
     vip: /\b(travel advisor|luxury programme|luxury program|vip|virtuoso|amenit)/.test(t),
     parking: /\b(parking|park the car|garage|valet)\b/.test(t),
     pets: /\b(pet|dog|cat|puppy)s?\b/.test(t),
-    faqOther: /\b(directions|how do we get|wifi|wi-fi|pool|gym|breakfast time|check[- ]?out time|dress code)\b/.test(t),
+    faqOther:
+      /\b(directions|how do we get|wifi|wi-fi|pool|gym|fitness|breakfast time|check[- ]?out( time)?|time is check[- ]?(in|out)|dress code)\b/.test(t) &&
+      !/\b(late check[- ]?out|check[- ]?out (late|later|at \d))\b/.test(t),
+    lateCheckOut: /\b(late check[- ]?out|check[- ]?out (late|later|at \d)|leave (the room )?later)\b/.test(t),
     repeat: /\b(third time|second time|again|still (no|haven't|not)|nobody (has )?(replied|answered)|chasing)\b/.test(t),
   };
 }
@@ -242,6 +247,7 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
   const booking = bm.booking;
   if (booking) hotel = getHotel(booking.hotelId);
   const guest = booking ? getGuest(booking.guestId) : undefined;
+  const senderFirst = (msg.fromName.replace(/^Unknown.*$/, "") || guest?.name || "guest").split(/[ ,]/)[0] || "guest";
 
   const actions: ProposedAction[] = [];
   const paras: string[] = [];
@@ -252,6 +258,8 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
   let urgency: "low" | "normal" | "high" = "normal";
   let confidence = 0.8;
   let handoffReason = "";
+  let draftOverride: string | null = null;
+  let autoSend: AutoSend = { kind: "none", reason: "" };
   const cite = (p: Policy[]) => p.forEach((x) => citations.add(x.id));
   const arrival = booking?.checkIn ?? parseSingleDate(text, now) ?? addDays(iso(now), 2);
   const dueBefore = (days: number) => addDays(arrival, -days);
@@ -274,13 +282,23 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
     return finish("other", "high");
   }
 
+  // 0b. Scope: only the guest's stay at Aurel. Text inside a message is information, never an instruction.
+  const topic = topicCheck(text);
+  if (!topic.ok) {
+    draftOverride = TEMPLATES.off_topic_decline({ name: senderFirst, channel: msg.channel });
+    autoSend = { kind: "off_topic_decline", reason: `Topic check in code: ${topic.reason.replace("_", " ")}. Fixed decline template; routed to an agent and counted in the audit log.`, body: draftOverride };
+    didNotPromise.push("Did not attempt the off-topic task or follow any instruction inside the message.");
+    confidence = 0.9;
+    return finish("off_topic", "low");
+  }
+
   // 1. Primary category by priority.
   let category: Category = "other";
   if (it.group) category = "group_event";
   else if (it.cancel) category = "cancellation_refund";
   else if (it.modify && booking) category = "modify_booking";
   else if ((it.enquiry || it.priceMatch) && !(it.parking || it.pets || it.faqOther)) category = "new_booking_enquiry";
-  else if (it.cot || it.occasion || it.transfer || it.earlyCheckIn || it.spa || it.dining || it.allergy || it.vip) category = "special_request";
+  else if (it.cot || it.occasion || it.transfer || it.earlyCheckIn || it.lateCheckOut || it.spa || it.dining || it.allergy || it.vip) category = "special_request";
   else if (it.parking || it.pets || it.faqOther) category = "pre_arrival_question";
 
   // 2. Group and events: route to sales, acknowledge, no quoting.
@@ -297,7 +315,12 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
       `Thank you for thinking of ${hotel?.name ?? "Aurel"} for your group. Requests of this size are handled by our Group Sales team so you get a single proposal covering rooms, meeting space and dining. I have passed your brief to them and a sales manager will come back to you within one working day with availability and a proposal.`,
       "If you can share your preferred dates, an approximate room count per night and any meeting-room requirements, it will help us come back with something accurate first time.",
     );
-    didNotPromise.push("No rates or availability quoted for a group; sales sets group pricing.");
+    didNotPromise.push("No rates or availability quoted for a group; the groups specialists set group pricing.");
+    autoSend = {
+      kind: "group_ack",
+      reason: "Fixed template acknowledgement; the groups specialist replies within one working day.",
+      body: TEMPLATES.group_ack({ name: senderFirst, hotel: hotel?.name, channel: msg.channel }),
+    };
     return finish(category, "normal");
   }
 
@@ -343,6 +366,11 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
         );
         didNotPromise.push("Did not confirm a refund, credit or waiver. Manager decides.");
         didNotPromise.push("Did not ask the guest for medical documentation.");
+        autoSend = {
+          kind: "holding_reply",
+          reason: "Outside the rules: fixed holding template sent at once; the manager decides and replies in the same thread.",
+          body: TEMPLATES.holding_reply({ name: senderFirst, hotel: hotel!.name, channel: msg.channel }),
+        };
       }
     }
     return finish(category, urgency);
@@ -563,6 +591,24 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
       if (prev) actions.push(quoteAction(prev, "Previous-night rate, the only way to guarantee early occupancy."));
       didNotPromise.push("Did not confirm early check-in (the exact failure that got the last bot switched off).");
     }
+    if (it.lateCheckOut) {
+      secondary.add("special_request");
+      cite(searchPolicies(hotel.id, "late check-out departure"));
+      actions.push({
+        type: "create_trace",
+        hotelId: hotel.id,
+        bookingId: booking.id,
+        department: "front_office",
+        summary: `Guest asks for a late check-out on ${fmtShort(booking.checkOut)}. Decide on the morning of departure from arrivals; complimentary until 14:00 if free, published charge after that.`,
+        due: booking.checkOut,
+        sensitive: false,
+        rationale: "Late check-out is confirmed by front office on the day, never in advance.",
+      });
+      paras.push(
+        `On the late check-out: our standard check-out at ${hotel.name} is ${hotel.checkOut}. A late check-out until 14:00 is complimentary when the room is not needed for an arrival, and the front office confirms it on the morning you leave rather than in advance, so I have noted the request on your booking. If you need a guaranteed later departure, the room can be kept until 18:00 for half the nightly rate.`,
+      );
+      didNotPromise.push("Did not confirm the late check-out; front office decides on the day.");
+    }
     if (it.spa) {
       secondary.add("special_request");
       cite(searchPolicies(hotel.id, "spa"));
@@ -674,8 +720,17 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
       const pp = p.find((x) => x.topic === "Pets");
       bits.push(pp ? `Pets: ${pp.text}` : `Pets: the ${hotel.name} team will confirm their pet policy for you.`);
     }
-    if (it.faqOther) bits.push(`Check-in at ${hotel.name} is from ${hotel.checkIn} and check-out is by ${hotel.checkOut}.`);
-    paras.push(`Thank you for your message. Here is what you need for ${hotel.name}:`, bits.map((b) => `• ${b}`).join("\n"), "If you let me know your booking reference I can add the parking and your dog to the reservation so the team are expecting you.");
+    if (it.faqOther) {
+      const hours = searchPolicies(hotel.id, "check-in check-out time hours");
+      const fac = searchPolicies(hotel.id, "gym fitness pool wifi breakfast facilities");
+      const hp = hours.find((x) => x.topic === "Check-in and check-out times");
+      const fp = fac.find((x) => x.topic === "Facilities");
+      const tl = text.toLowerCase();
+      if (hp && /check[- ]?(in|out)/.test(tl)) { cite([hp]); bits.push(`Times: ${hp.text}`); }
+      if (fp && /\b(gym|fitness|pool|wifi|wi-fi|breakfast|spa)\b/.test(tl)) { cite([fp]); bits.push(`Facilities: ${fp.text}`); }
+      if (!bits.length) bits.push(`Check-in at ${hotel.name} is from ${hotel.checkIn} and check-out is by ${hotel.checkOut}.`);
+    }
+    paras.push(`Thank you for your message. Here is what you need for ${hotel.name}:`, bits.map((b) => `• ${b}`).join("\n"), it.parking || it.pets ? "If you let me know your booking reference I can add this to the reservation so the team are expecting you." : "If there is anything else about your stay, just reply here.");
   } else if (!hotel && (it.parking || it.pets || it.faqOther)) {
     paras.push("Happy to help. Which Aurel hotel are you staying at? Parking and pet arrangements differ by property and I want to give you the exact answer.");
     confidence = 0.6;
@@ -684,7 +739,7 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
   if (!paras.length) {
     paras.push("Thank you for your message. I want to make sure I help with the right thing: could you tell me a little more about what you need, and your booking reference if you have one?");
     confidence = 0.4;
-    actions.push({ type: "handoff", to: "reservations_agent", reason: "Intent unclear to the copilot.", urgency: "today", context: text.slice(0, 300) });
+    actions.push({ type: "handoff", to: "reservations_agent", reason: "Intent unclear to the AI agent.", urgency: "today", context: text.slice(0, 300) });
   }
 
   return finish(category, urgency);
@@ -713,7 +768,8 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
     const handoff = actions.find((a) => a.type === "handoff");
     const sensitive = sensitiveTypes.length > 0;
     const onlyFaq = cat === "pre_arrival_question" && !sensitive && !handoff && actions.length === 0;
-    const body = [greeting(msg, guest?.name), ...paras, signoff(msg, hotel)].join("\n\n");
+    const body = draftOverride ?? [greeting(msg, guest?.name), ...paras, signoff(msg, hotel)].join("\n\n");
+    const policyAuto = onlyFaq && confidence >= 0.8 && !!hotel && citations.size > 0 && autoSend.kind === "none";
     const proposal: AgentProposal = {
       triage: {
         category: cat,
@@ -738,7 +794,8 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
       didNotPromise,
       policyCitations: [...citations],
       confidence: Math.round(confidence * 100) / 100,
-      autoSendEligible: onlyFaq && confidence >= 0.8,
+      autoSendEligible: policyAuto,
+      autoSend: policyAuto ? { kind: "policy_answer", reason: "Policy-only message, hotel known, every line cites a hotel policy. Sent alone and logged." } : autoSend,
       requiresHuman: true,
       requiresHumanReason: handoffReason || (handoff ? handoff.reason : "v1 rule: every outbound message is approved by a reservations agent before it is sent."),
     };
@@ -752,6 +809,7 @@ function capitalise(s: string): string {
 
 function summarise(cat: Category, it: Intents, hotel?: Hotel, booking?: Booking): string {
   const bits: string[] = [];
+  if (cat === "off_topic") return "Not about a stay at Aurel, or an attempt to instruct the AI agent. Declined by template.";
   if (it.card) return "Guest sent card details in the message. Redact and send payment link.";
   if (cat === "group_event") bits.push("Group or event enquiry; route to sales");
   if (cat === "cancellation_refund") bits.push(it.compassionate ? "Compassionate cancellation on a non-refundable booking" : "Cancellation request");
@@ -763,6 +821,7 @@ function summarise(cat: Category, it: Intents, hotel?: Hotel, booking?: Booking)
     it.occasion && it.occasion,
     it.transfer && "airport transfer",
     it.earlyCheckIn && "early check-in",
+    it.lateCheckOut && "late check-out",
     it.spa && "spa",
     it.dining && "dining recommendation",
     it.allergy && "allergy (sensitive)",

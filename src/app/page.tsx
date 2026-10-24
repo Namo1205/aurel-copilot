@@ -1,67 +1,143 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useStore } from "@/lib/store";
-import { InboxList } from "@/components/desk/InboxList";
-import { MessageView } from "@/components/desk/MessageView";
-import { ProposalPanel } from "@/components/desk/ProposalPanel";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { isPending, useSessionGuard, useStore } from "@/lib/store";
+import { ConversationList } from "@/components/desk/ConversationList";
+import { Thread } from "@/components/desk/Thread";
+import { ContextPanel } from "@/components/desk/ContextPanel";
 import { Compose } from "@/components/desk/Compose";
+import { conversationKey, conversationsFor, viewsFor, type View, type ViewId } from "@/lib/desk/visibility";
+import { ROSTER, isOnShift } from "@/lib/desk/roster";
 
-function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
+export default function Desk() {
   return (
-    <div className="px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-stone-500">{label}</div>
-      <div className="text-lg font-semibold leading-tight">{value}</div>
-      {hint ? <div className="text-[11px] text-stone-500">{hint}</div> : null}
-    </div>
+    <Suspense fallback={<div className="p-6 text-sm text-stone-500">Loading…</div>}>
+      <DeskInner />
+    </Suspense>
   );
 }
 
-export default function Desk() {
+// Deep links: /?tab=auto&item=m-013 opens that view and the conversation holding that message.
+function DeskInner() {
+  const session = useSessionGuard();
   const { state, dispatch } = useStore();
-  const [composing, setComposing] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
+  const params = useSearchParams();
+  const linkedTab = params.get("tab") as ViewId | null;
+  const linkedItem = params.get("item");
+  const wantSamples = params.get("samples") === "load";
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(t);
-  }, []);
-  const item = state.selectedId ? state.items[state.selectedId] : undefined;
+    if (linkedItem && state.hydrated && state.items[linkedItem]) dispatch({ type: "select", id: linkedItem });
+  }, [linkedItem, state.hydrated, state.items, dispatch]);
+  // /?samples=load puts the sample messages on the desk, for rehearsals and screenshots.
+  useEffect(() => {
+    if (wantSamples && state.hydrated && state.samples !== "loaded") dispatch({ type: "load_samples" });
+  }, [wantSamples, state.hydrated, state.samples, dispatch]);
+  const [composing, setComposing] = useState(false);
+  const [viewId, setViewId] = useState<ViewId | null>(null);
+  const [focus, setFocus] = useState<string>(""); // seniors: one agent's conversations
+  const [now] = useState(() => new Date());
 
-  const handled = state.order.map((id) => state.items[id]).filter((i) => i.handledAt);
-  const waiting = state.order.map((id) => state.items[id]).filter((i) => !i.handledAt);
-  const oldestWaitMin = waiting.length ? Math.max(...waiting.map((i) => (now - Date.parse(i.receivedAt)) / 60000)) : 0;
-  const avgHandle = handled.length ? handled.reduce((s, i) => s + (Date.parse(i.handledAt!) - Date.parse(i.receivedAt)) / 60000, 0) / handled.length : 0;
-  const tracesCreated = state.traces.length;
-  const sensitiveTraces = state.traces.filter((t) => t.sensitive).length;
-  const autoEligible = state.order.filter((id) => state.items[id].analysis?.proposal.autoSendEligible).length;
+  const all = useMemo(() => state.order.map((id) => state.items[id]), [state.order, state.items]);
+  if (!state.hydrated || !session) return <div className="p-6 text-sm text-stone-500">Loading…</div>;
 
-  if (!state.hydrated) return <div className="p-6 text-sm text-stone-500">Loading…</div>;
+  const views = viewsFor(session.role);
+  const view: View = views.find((v) => v.id === (viewId ?? linkedTab)) ?? views[0];
+  const convs = conversationsFor(session, all, focus);
+  const visible = convs.filter(view.filter);
+  const counts = Object.fromEntries(views.map((v) => [v.id, v.id === "done" ? 0 : convs.filter(v.filter).length]));
+  const selectedItem = state.selectedId ? state.items[state.selectedId] : undefined;
+  const selectedKey = selectedItem ? conversationKey(selectedItem) : null;
+  const conversation = visible.find((c) => c.key === selectedKey) ?? visible[0] ?? null;
+
+  // Seniors: a rail of agents on shift with open counts.
+  const team =
+    session.role === "senior"
+      ? ROSTER.filter((s) => s.role === "agent" && (isOnShift(s, now, state.shiftOverrides) || all.some((i) => i.ownerId === s.id && isPending(i)))).map((s) => ({
+          s,
+          open: all.filter((i) => i.ownerId === s.id && isPending(i)).length,
+        }))
+      : [];
+
+  const emptyText =
+    all.length === 0 && state.gmail?.configured
+      ? `No conversations yet. New mail to ${state.gmail.address} appears here within 20 seconds, sorted and owned.`
+      : view.id === "done"
+        ? "Nothing closed yet."
+        : session.role === "agent"
+          ? "Nothing waiting for you. New conversations assigned to you appear here."
+          : "Nothing in this view.";
 
   return (
     <div className="flex-1 flex min-h-0">
-      <InboxList onCompose={() => setComposing(true)} />
-      <div className="flex-1 min-w-0 flex flex-col">
-        <div className="border-b border-stone-200 bg-white/60 flex flex-wrap items-stretch divide-x divide-stone-200">
-          <Metric label="Waiting" value={String(waiting.length)} hint={waiting.length ? `oldest ${Math.round(oldestWaitMin)} min` : "inbox clear"} />
-          <Metric label="Handled" value={String(handled.length)} hint={handled.length ? `avg ${Math.round(avgHandle)} min to reply` : "baseline 9h median"} />
-          <Metric label="Traces created" value={String(tracesCreated)} hint={sensitiveTraces ? `${sensitiveTraces} restricted` : "requests now structured"} />
-          <Metric label="Auto-send eligible" value={String(autoEligible)} hint="phase 2 candidates" />
-          <div className="ml-auto flex items-center px-3">
-            <button onClick={() => dispatch({ type: "reset" })} className="text-xs text-stone-500 hover:underline">
-              Reset demo
-            </button>
+      {team.length ? (
+        <nav className="w-[180px] shrink-0 border-r border-stone-200 bg-stone-50 flex flex-col min-h-0 text-sm">
+          <div className="px-3 h-11 flex items-center text-[11px] uppercase tracking-wide text-stone-400 border-b border-stone-100">Team</div>
+          <ul className="flex-1 overflow-y-auto scroll-thin py-1">
+            <li>
+              <button onClick={() => setFocus("")} className={`w-full text-left px-3 py-1.5 flex items-center ${focus === "" ? "bg-white font-medium text-stone-900" : "text-stone-600 hover:bg-white/60"}`}>
+                Everyone
+              </button>
+            </li>
+            <li>
+              <button onClick={() => setFocus(session.staffId)} className={`w-full text-left px-3 py-1.5 flex items-center ${focus === session.staffId ? "bg-white font-medium text-stone-900" : "text-stone-600 hover:bg-white/60"}`}>
+                Me
+                <span className="ml-auto text-xs tabular-nums text-stone-400">{all.filter((i) => i.ownerId === session.staffId && isPending(i)).length || ""}</span>
+              </button>
+            </li>
+            {team.map(({ s, open }) => (
+              <li key={s.id}>
+                <button onClick={() => setFocus(s.id)} className={`w-full text-left px-3 py-1.5 flex items-center ${focus === s.id ? "bg-white font-medium text-stone-900" : "text-stone-600 hover:bg-white/60"}`}>
+                  <span className="truncate">{s.name.split(" ")[0]}</span>
+                  <span className={`ml-auto text-xs tabular-nums ${open >= 5 ? "text-rose-700 font-medium" : "text-stone-400"}`}>{open || ""}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ) : null}
+      <ConversationList
+        conversations={visible}
+        views={views}
+        view={view}
+        onView={(v) => {
+          setViewId(v.id);
+          setComposing(false);
+        }}
+        selectedKey={conversation?.key ?? null}
+        onSelect={(c) => {
+          setComposing(false);
+          dispatch({ type: "select", id: (c.open ?? c.latest).message.id });
+        }}
+        counts={counts}
+        emptyText={emptyText}
+        onCompose={session.role === "manager" || session.role === "senior" ? () => setComposing(true) : undefined}
+      />
+      {composing ? (
+        <div className="flex-1 min-w-0 overflow-y-auto scroll-thin">
+          <div className="mx-auto max-w-[760px] px-6 py-5">
+            <Compose onClose={() => setComposing(false)} />
           </div>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto scroll-thin">
-          <div className="mx-auto max-w-[1240px] p-4 grid grid-cols-1 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-4 items-start">
-            <div className="space-y-4">
-              {composing ? <Compose onClose={() => setComposing(false)} /> : null}
-              {item ? <MessageView item={item} /> : <div className="text-sm text-stone-500">Select a message.</div>}
-            </div>
-            <div>{item ? <ProposalPanel key={item.message.id} item={item} /> : null}</div>
+      ) : conversation ? (
+        <>
+          <Thread key={conversation.key} conversation={conversation} />
+          <ContextPanel conversation={conversation} />
+        </>
+      ) : (
+        <div className="flex-1 grid place-items-center p-8 text-sm text-stone-500 text-center max-w-none">
+          <div className="max-w-sm leading-relaxed">
+            {emptyText}
+            {session.role === "manager" || session.role === "senior" ? (
+              <div className="mt-3">
+                <button onClick={() => setComposing(true)} className="text-brand underline">
+                  Simulate a message
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

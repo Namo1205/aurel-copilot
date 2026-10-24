@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// The structured proposal the copilot produces for every inbound message.
+// The structured proposal the AI agent produces for every inbound message.
 // Nothing in here is executed until a CRO agent approves it in the UI.
 
 export const Category = z.enum([
@@ -10,8 +10,19 @@ export const Category = z.enum([
   "pre_arrival_question",
   "cancellation_refund",
   "group_event",
+  "off_topic",
   "other",
 ]);
+
+// What, if anything, the AI agent may send without a person. Only cited
+// policy answers and the three fixed templates ever qualify (PRD section 4).
+export const AutoSend = z.object({
+  kind: z.enum(["none", "policy_answer", "holding_reply", "group_ack", "off_topic_decline"]),
+  reason: z.string(),
+  // The fixed text that went out. When set, draftReply is the owner's follow-up, not the template.
+  body: z.string().optional(),
+});
+export type AutoSend = z.infer<typeof AutoSend>;
 export type Category = z.infer<typeof Category>;
 
 export const Channel = z.enum(["email", "whatsapp", "ota", "phone"]);
@@ -113,6 +124,7 @@ export const AgentProposal = z.object({
   policyCitations: z.array(z.string()),
   confidence: z.number().min(0).max(1),
   autoSendEligible: z.boolean(),
+  autoSend: AutoSend.default({ kind: "none", reason: "" }),
   requiresHuman: z.boolean(),
   requiresHumanReason: z.string(),
 });
@@ -125,6 +137,7 @@ export const CATEGORY_LABEL: Record<Category, string> = {
   pre_arrival_question: "Pre-arrival question",
   cancellation_refund: "Cancellation / refund",
   group_event: "Group / event",
+  off_topic: "Off-topic",
   other: "Other",
 };
 

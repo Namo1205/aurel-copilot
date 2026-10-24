@@ -16,7 +16,7 @@ export interface Handoff {
 }
 
 export interface ExecutionResult {
-  sentReply: { channel: string; to: string; body: string; sentAt: string } | null;
+  sentReply: { channel: string; to: string; body: string; sentAt: string; deliveredVia?: "gmail"; deliveryError?: string } | null;
   traces: Trace[];
   bookingUpdates: Booking[];
   handoffs: Handoff[];
@@ -48,7 +48,7 @@ export function execute(input: {
             summary: action.summary,
             due: action.due,
             sensitive: action.sensitive,
-            source: `copilot:${message.id}`,
+            source: `AI agent:${message.id}`,
           }),
         );
         break;

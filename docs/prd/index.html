@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Aurel Reservations AI Agent PRD</title>
+<style>
+  @page { size: A4; margin: 10mm 11mm; }
+  :root { --ink:#1c1a17; --muted:#6b665e; --line:#ddd8cf; --soft:#f4f1ea; --brand:#1f3d2b; --brand2:#4f7a5f; --brand3:#b7cdbd; --brandsoft:#e4ece6; --amber:#b8860b; --ambersoft:#f0e6d0; --rose:#b3362f; --rosesoft:#fbeeed; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:#fff; color:var(--ink); font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif; font-size:9.1pt; line-height:1.28; }
+  .page { width:188mm; min-height:275mm; page-break-after:always; position:relative; }
+  .page:last-child { page-break-after:auto; }
+  h1 { font-size:17pt; margin:0 0 2px; letter-spacing:-0.2px; }
+  .meta { color:var(--muted); font-size:8.4pt; margin-bottom:6px; }
+  .gloss { font-size:7.7pt; color:var(--muted); border-left:2px solid var(--brand3); padding-left:7px; margin-bottom:4px; }
+  .tldr { display:grid; grid-template-columns:auto 1fr; gap:1px 10px; background:var(--brandsoft); border-radius:6px; padding:5px 9px; font-size:8.3pt; margin-bottom:4px; }
+  .tldr b { color:var(--brand); white-space:nowrap; }
+  h2 { font-size:11pt; margin:6px 0 3px; padding-bottom:3px; border-bottom:1px solid var(--line); color:var(--brand); }
+  h2 span.n { display:inline-block; width:16px; height:16px; border-radius:50%; background:var(--brand); color:#fff; font-size:8pt; text-align:center; line-height:16px; margin-right:6px; vertical-align:1px; }
+  h3 { font-size:9.2pt; margin:5px 0 2px; }
+  p { margin:3px 0; }
+  .row { display:flex; gap:8px; align-items:stretch; }
+  .col { flex:1; min-width:0; }
+  .box { border:1px solid var(--line); border-radius:6px; padding:4px 7px; font-size:7.3pt; }
+  .box h4 { margin:0 0 3px; font-size:8.8pt; }
+  .box ul { margin:0; padding-left:14px; }
+  .box li { margin:1px 0; }
+  .box.in { border-color:var(--brand2); background:var(--brandsoft); }
+  .box.next { background:var(--soft); }
+  .box.out { background:var(--rosesoft); border-color:#e4b6b2; }
+  table { border-collapse:collapse; width:100%; font-size:8pt; }
+  th, td { text-align:left; vertical-align:top; padding:2px 5px; border-bottom:1px solid var(--line); }
+  th { font-size:7.4pt; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600; background:var(--soft); }
+  td.k { font-weight:600; white-space:nowrap; }
+  .tag { display:inline-block; padding:0 5px; border-radius:8px; font-size:7.4pt; border:1px solid var(--brand3); background:var(--brandsoft); color:var(--brand); white-space:nowrap; }
+  .tag.auto { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .tag.mgr { background:var(--ambersoft); border-color:#dcc48a; color:#6b4f08; }
+  .tag.no { background:var(--rosesoft); border-color:#e4b6b2; color:var(--rose); }
+  .cards { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .card { border:1px solid var(--line); border-radius:6px; padding:4px 6px; font-size:7.6pt; }
+  .card b { display:block; font-size:8.8pt; margin-bottom:2px; }
+  .card .m { color:var(--muted); }
+  figure { margin:4px 0; }
+  figcaption { font-size:7.8pt; color:var(--muted); margin-top:2px; }
+  svg { display:block; width:100%; height:auto; font-family:inherit; }
+  svg text { font-size:8.4px; fill:var(--ink); }
+  svg .s { font-size:7.6px; fill:var(--muted); }
+  svg .b { font-weight:600; }
+  svg .w { fill:#fff; }
+  .spec td { font-size:7.4pt; padding:2px 4px; line-height:1.22; }
+  .spec td:first-child { font-weight:600; white-space:nowrap; }
+  .spec tr:nth-child(even) td { background:#faf8f4; }
+  .foot { position:absolute; bottom:0; left:0; right:0; font-size:7.2pt; color:var(--muted); border-top:1px solid var(--line); padding-top:4px; }
+  .strip { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; font-size:7.6pt; }
+  .strip > div { background:var(--soft); border-radius:5px; padding:5px 7px; border-top:3px solid var(--brand3); }
+  .strip > div:nth-child(3) { border-top-color:var(--brand2); }
+  .strip > div:nth-child(4) { border-top-color:var(--brand); }
+  .strip b { display:block; font-size:8.3pt; }
+  .real { display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:7.8pt; }
+  .real > div { border-radius:6px; padding:5px 8px; }
+  .real .r { background:var(--brandsoft); }
+  .real .sim { background:var(--soft); }
+  .real b { display:block; margin-bottom:2px; }
+  .small { font-size:7.8pt; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ============================ PAGE 1 ============================ -->
+<section class="page">
+  <h1>PRD: Aurel Reservations AI Agent, v1</h1>
+  <div class="meta" style="margin-bottom:4px">Product requirements · Owner: AI Product Manager · Engineering: 2 full-stack, designer at 50% · 23 October 2026</div>
+  <div class="tldr">
+    <b>Problem</b><span>Guests wait 9 hours for an email reply (34% book if answered in an hour, 9% after a day), and 23% of pre-arrival requests are not delivered.</span>
+    <b>What we build</b><span>An AI agent that reads every email and WhatsApp message, marks its type, assigns a named owner, drafts the reply with live prices and the right hotel rule, turns requests into hotel to-dos, and answers policy questions on its own.</span>
+    <b>How we measure</b><span>Reply time under an hour, requests not delivered under 10% then 5%, 80% of policy-only messages answered without a person, zero broken promises, every item owned.</span>
+  </div>
+  <div class="gloss"><b>Terms.</b> <b>AI agent</b> is the software, always written with "AI". <b>Agent</b> on its own is a person on the 22-person reservations desk (the CRO). The <b>PMS</b> is the hotel's booking system. A <b>trace</b> is a to-do in the PMS sent to a hotel department with a due date. A <b>queue</b> is a list of items waiting for one kind of owner. An <b>owner</b> is the named person accountable for an item until it is closed.</div>
+
+  <h2><span class="n">1</span>Scope</h2>
+  <div class="row">
+    <div class="col box in"><h4>In v1 (first quarter)</h4><ul>
+      <li>AI agent marks the type, finds the booking, flags urgency and sensitive data</li>
+      <li>Owner assigned on arrival, by rule</li>
+      <li>Important view + five queues (Flow A)</li>
+      <li>Sends alone: cited policy answers; fixed templates only: holding replies, group acknowledgements, day-before message</li>
+      <li>Drafts with live PMS price; PMS changes prepared within rules; one PMS trace per request</li>
+      <li>Day-before check on every booking (Flow B)</li>
+      <li>Dashboard by role (Flow C)</li>
+      <li>Login per role: agent, senior, manager, groups specialist</li>
+      <li><b>If time runs short, cut from the end:</b> email drafts + owners → traces → dashboard → WhatsApp → day-before check</li>
+    </ul></div>
+    <div class="col box next"><h4>Next (second quarter)</h4><ul>
+      <li>Price quotes and within-rules changes earn the right to send alone</li>
+      <li>Out-of-hours cover for the types that send alone</li>
+      <li>Automatic message to the guest when a trace is closed</li>
+      <li>Languages beyond English</li>
+    </ul></div>
+    <div class="col box out"><h4>Out</h4><ul>
+      <li>Booking and taking payment without a person</li>
+      <li>Any discount or price match</li>
+      <li>Group pricing (the groups specialists own it)</li>
+      <li>Website chatbot</li>
+      <li>PMS write without approval</li>
+    </ul></div>
+  </div>
+
+  <h3>Channel choice: which channels, when, and why</h3>
+  <table>
+    <tr><th>Channel</th><th>Share</th><th>v1</th><th>Why</th></tr>
+    <tr><td class="k">Email</td><td>58%</td><td><span class="tag">Week 1</span></td><td>Biggest and slowest channel (9 h median). Mailbox API is standard. Written, so draft-and-approve fits naturally.</td></tr>
+    <tr><td class="k">WhatsApp</td><td>11%</td><td><span class="tag">Week 11</span></td><td>Guests expect minutes. WhatsApp Business API needs Meta verification (1 to 4 weeks). Short replies; same AI agent, same queues.</td></tr>
+    <tr><td class="k">OTA messaging</td><td>7%</td><td><span class="tag no">Q2</span></td><td>Booking.com and Expedia partner messaging APIs need approval that takes weeks to months. Behaviour identical once connected.</td></tr>
+    <tr><td class="k">Phone</td><td>24%</td><td><span class="tag no">Out</span></td><td>Live answer in seconds, recording consent, no transcripts today, and no engineer capacity. Agents can paste a call note into the desk and get the same help.</td></tr>
+  </table>
+
+  <h3>Prototype: what is real and what is simulated</h3>
+  <div class="real">
+    <div class="r"><b>Real</b>The AI agent (Gemini) doing everything in the v1 list above, against per-hotel policy documents. Rule-based fallback if the model is down, labelled.</div>
+    <div class="sim"><b>Simulated</b>Email and WhatsApp arrive from seeded messages and a form. The PMS is a mock with realistic hotels, rules, bookings and daily prices. The payment link is a placeholder. A hotel board stands in for the PMS trace list.</div>
+  </div>
+
+  <h2><span class="n">2</span>Users</h2>
+  <div class="cards">
+    <div class="card"><b>Reservations agent (16)</b>Works the Important view and their own queue. Approves, edits, changes the type, or sends to a manager.<div class="m">Needs: one click to send a right answer; never to be blamed for the AI agent's mistake.</div></div>
+    <div class="card"><b>Senior agent (4)</b>Everything an agent has, plus their team's lists and reassignment.<div class="m">Needs: see who is stuck before the guest notices.</div></div>
+    <div class="card"><b>Reservations manager (2)</b>Owns the Manager queue. Each item arrives with the booking, the rule it breaks and the guest's words.<div class="m">Needs: decide once, same day, with context.</div></div>
+    <div class="card"><b>Groups and events specialist (3)</b>Owns the Sales queue. Group and event items arrive with dates, size, hotel and the guest's words; replies within one working day.<div class="m">Needs: a complete brief, no generalist back-and-forth.</div></div>
+  </div>
+  <p class="small" style="margin:3px 0"><b>Not users of this product, but served by it:</b> <b>hotel department staff</b> (front office, housekeeping, concierge, F&amp;B) work the traces in the PMS they already use; the <b>hotel general manager</b> gets trace escalations and the weekly promises-kept number; the <b>guest</b> receives auto-sent messages signed as the reservations team.</p>
+  
+
+  <div class="foot">Aurel Reservations AI Agent · PRD v1 · page 1 of 4</div>
+</section>
+
+<!-- ============================ PAGE 2 ============================ -->
+<section class="page">
+  <h2 style="margin-top:0"><span class="n">3</span>Flows</h2>
+
+  <h3>Flow A · A message arrives</h3>
+  <figure>
+  <svg viewBox="0 0 700 150" role="img" aria-label="Flow A">
+    <defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#6b665e"/></marker></defs>
+    <rect x="0" y="52" width="86" height="46" rx="6" fill="#f4f1ea" stroke="#ddd8cf"/><text x="43" y="70" text-anchor="middle" class="b">Email API</text><text x="43" y="83" text-anchor="middle" class="b">WhatsApp API</text>
+    <line x1="86" y1="75" x2="104" y2="75" stroke="#6b665e" marker-end="url(#a)"/>
+    <rect x="106" y="40" width="160" height="70" rx="8" fill="#1f3d2b"/>
+    <text x="186" y="55" text-anchor="middle" class="w b" style="font-size:9.5px">The AI agent</text>
+    <text x="114" y="69" class="w" style="font-size:7.4px">1 · Marks the type, flags urgency</text>
+    <text x="114" y="81" class="w" style="font-size:7.4px">2 · Finds booking, strips card numbers</text>
+    <text x="114" y="93" class="w" style="font-size:7.4px">3 · Assigns an owner (rule below)</text>
+    <text x="114" y="105" class="w" style="font-size:7.4px">4 · Drafts · PMS changes · traces</text>
+    <g stroke="#6b665e" fill="none">
+      <path d="M266,75 C286,75 286,14 306,14" marker-end="url(#a)"/>
+      <path d="M266,75 C286,75 286,46 306,46" marker-end="url(#a)"/>
+      <path d="M266,75 C286,75 286,78 306,78" marker-end="url(#a)"/>
+      <path d="M266,75 C286,75 286,110 306,110" marker-end="url(#a)"/>
+      <path d="M266,75 C286,75 286,140 306,140" marker-end="url(#a)"/>
+    </g>
+    <rect x="308" y="3" width="150" height="22" rx="4" fill="#1f3d2b"/><text x="316" y="12" class="w b" style="font-size:7.8px">Auto-sent log</text><text x="316" y="21" class="w" style="font-size:7.2px">policy answers · holding replies · group acks</text>
+    <rect x="308" y="35" width="150" height="22" rx="4" fill="#e4ece6"/><text x="316" y="44" class="b" style="font-size:7.8px">Agent queue (+ Important view)</text><text x="316" y="53" class="s">draft ready, one-click approve</text>
+    <rect x="308" y="67" width="150" height="22" rx="4" fill="#f0e6d0"/><text x="316" y="76" class="b" style="font-size:7.8px">Manager queue</text><text x="316" y="85" class="s">outside the rules, special rates</text>
+    <rect x="308" y="99" width="150" height="22" rx="4" fill="#f0e6d0"/><text x="316" y="108" class="b" style="font-size:7.8px">Sales queue</text><text x="316" y="117" class="s">groups and events, details attached</text>
+    <rect x="308" y="129" width="150" height="20" rx="4" fill="#e4ece6"/><text x="316" y="138" class="b" style="font-size:7.8px">Hotel traces</text><text x="316" y="146" class="s">written into the PMS, one per request</text>
+    <line x1="458" y1="46" x2="476" y2="46" stroke="#6b665e" marker-end="url(#a)"/>
+    <rect x="478" y="35" width="104" height="22" rx="4" fill="#fff" stroke="#ddd8cf"/><text x="486" y="44" class="b" style="font-size:7.8px">Owner reviews</text><text x="486" y="53" class="s">approve · edit · change type</text>
+    <line x1="582" y1="46" x2="600" y2="46" stroke="#6b665e" marker-end="url(#a)"/>
+    <rect x="602" y="35" width="98" height="22" rx="4" fill="#1f3d2b"/><text x="651" y="44" text-anchor="middle" class="w b" style="font-size:7.8px">Sent to guest</text><text x="651" y="53" text-anchor="middle" class="w" style="font-size:7.2px">PMS updated · traces live</text>
+    <line x1="458" y1="14" x2="600" y2="14" stroke="#6b665e" stroke-dasharray="3 3"/><line x1="600" y1="14" x2="651" y2="33" stroke="#6b665e" stroke-dasharray="3 3" marker-end="url(#a)"/>
+    <text x="470" y="10" class="s">no review · spot-checked weekly</text>
+    <rect x="478" y="67" width="222" height="22" rx="4" fill="#fff" stroke="#ddd8cf"/><text x="486" y="76" class="b" style="font-size:7.8px">Manager decides, same day</text><text x="486" y="85" class="s">holding reply sent · decision reply in the same thread</text>
+    <rect x="478" y="99" width="222" height="22" rx="4" fill="#fff" stroke="#ddd8cf"/><text x="486" y="108" class="b" style="font-size:7.8px">Groups specialist replies within one working day</text><text x="486" y="117" class="s">from the Sales queue</text>
+    <rect x="478" y="129" width="222" height="20" rx="4" fill="#fff" stroke="#ddd8cf"/><text x="486" y="138" class="b" style="font-size:7.8px">Department acknowledges, delivers, marks done</text><text x="486" y="146" class="s">see Flow B</text>
+  </svg>
+  </figure>
+
+  <div class="row">
+    <div class="col">
+      <h3>Owner assigned on arrival</h3>
+      <table>
+        <tr><th>Item</th><th>Owner</th><th>Reassign</th></tr>
+        <tr><td>Policy-only question</td><td>The AI agent (sends alone). No policy found → next agent in rotation</td><td>Senior</td></tr>
+        <tr><td>Price, new booking, change, request, within-rules cancellation</td><td>Next agent on shift in rotation, skipping anyone over 15 pending</td><td>Senior</td></tr>
+        <tr><td>VIP or travel-advisor email; cannot be sorted</td><td>Senior agent on shift</td><td>Senior</td></tr>
+        <tr><td>Refund or change outside rules, special rate</td><td>Reservations manager on duty</td><td>Other manager</td></tr>
+        <tr><td>Group or event</td><td>Groups specialist on shift</td><td>Senior</td></tr>
+        <tr><td>Each trace, incl. the day-before call</td><td>Department head at that hotel</td><td>Hotel GM</td></tr>
+      </table>
+      <p class="small">Shift end: pending items move automatically by the same owner rule and the dashboard logs it. If nobody of that role is on shift the item stays, flagged, for a senior or manager.</p>
+    </div>
+    <div class="col">
+      <h3>Important view: what rises to the top</h3>
+      <table>
+        <tr><th>Rule</th><th>Why</th></tr>
+        <tr><td>New booking or price enquiry</td><td>Revenue: fast replies book, slow ones do not</td></tr>
+        <tr><td>Guest arrives within 48 hours</td><td>No time to recover from a miss</td></tr>
+        <tr><td>Allergy, medical or accessibility content</td><td>Safety</td></tr>
+        <tr><td>Guest has written more than once about the same thing</td><td>Already let down once</td></tr>
+        <tr><td>Compassionate cancellation; VIP or advisor</td><td>A person should reply fast</td></tr>
+      </table>
+      <p class="small">Important is a view, not a type. The item keeps its type and owner; the rule only changes where it is shown.</p>
+    </div>
+  </div>
+
+  <h3>Flow B · A special request becomes a kept promise</h3>
+  <figure>
+  <svg viewBox="0 0 700 46" role="img" aria-label="Flow B">
+    <defs><marker id="b" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#4f7a5f"/></marker></defs>
+    <g>
+      <rect x="0" y="4" width="112" height="38" rx="5" fill="#f4f1ea"/><text x="56" y="19" text-anchor="middle" class="b">"Can we add a cot?"</text><text x="56" y="31" text-anchor="middle" class="s">in a longer email</text>
+      <line x1="112" y1="23" x2="124" y2="23" stroke="#4f7a5f" marker-end="url(#b)"/>
+      <rect x="126" y="4" width="128" height="38" rx="5" fill="#e4ece6"/><text x="190" y="19" text-anchor="middle" class="b">AI agent creates a trace</text><text x="190" y="31" text-anchor="middle" class="s">Housekeeping · due day before arrival</text>
+      <line x1="254" y1="23" x2="266" y2="23" stroke="#4f7a5f" marker-end="url(#b)"/>
+      <rect x="268" y="4" width="120" height="38" rx="5" fill="#e4ece6"/><text x="328" y="19" text-anchor="middle" class="b">Reply says "logged"</text><text x="328" y="31" text-anchor="middle" class="s">"the hotel will confirm", never "done"</text>
+      <line x1="388" y1="23" x2="400" y2="23" stroke="#4f7a5f" marker-end="url(#b)"/>
+      <rect x="402" y="4" width="138" height="38" rx="5" fill="#f4f1ea"/><text x="471" y="19" text-anchor="middle" class="b">PMS trace list</text><text x="471" y="31" text-anchor="middle" class="s">acknowledged within 24 h · marked done</text>
+      <line x1="540" y1="23" x2="552" y2="23" stroke="#4f7a5f" marker-end="url(#b)"/>
+      <rect x="554" y="4" width="146" height="38" rx="5" fill="#1f3d2b"/><text x="627" y="19" text-anchor="middle" class="w b">Counted as a promise kept</text><text x="627" y="31" text-anchor="middle" class="w" style="font-size:7.4px">weekly % per hotel on the dashboard</text>
+    </g>
+  </svg>
+  <figcaption><b>Day-before check:</b> every booking gets an automatic message asking arrival time and anything else needed; bookings with a request, a restricted trace or a VIP flag get a front-office call instead, created as a trace.</figcaption>
+  </figure>
+
+  <div class="row">
+    <div class="col">
+      <h3>Flow C · The dashboard, visible to the whole desk</h3>
+      <table>
+        <tr><th>Role</th><th>Sees</th></tr>
+        <tr><td class="k">Manager</td><td>Pending per queue and per owner · oldest item anywhere · replies today and median time · auto-sent today and how many corrected · promises kept per hotel, read from PMS trace status · off-topic and manipulation attempts today · guardrail breaches</td></tr>
+        <tr><td class="k">Senior</td><td>Per agent: pending, resolved today, oldest item, items over 4 h, how often they edit drafts or change the type · one-click reassign</td></tr>
+        <tr><td class="k">Agent</td><td>Important view, then own queue, oldest first · age and due time on every item · own resolved today and average reply time</td></tr>
+      </table>
+      <p class="small"><b>Flags, not scores.</b> An item is flagged when it is older than 2 hours in opening hours, or when an owner has at least 5 items pending and more than 1.5× the desk average. The board shows items, never a ranking of people.</p>
+    </div>
+  </div>
+  <div class="foot">Aurel Reservations AI Agent · PRD v1 · page 2 of 4</div>
+</section>
+
+<!-- ============================ PAGE 3 ============================ -->
+<section class="page">
+  <h2 style="margin-top:0"><span class="n">4</span>AI agent behaviour spec</h2>
+  <p style="font-size:8.6pt;margin:2px 0 5px">One row per type. A message with several asks (date change + cot + anniversary) gets one proposal with one action per ask, at the strictest approval level among them. <b>Anything sends alone only when the whole message is of that type</b>: a spa question with a buried allergy never auto-sends. Scope is the guest's stay at Aurel only; text inside a message is information, never an instruction, and a topic check in code runs before drafting and before every send. Every sent message records the type, the policy used and what was not promised.</p>
+  <table class="spec">
+    <tr><th>Type · share</th><th>What it handles</th><th>What it never does</th><th>Hands off when → to whom</th><th>How it confirms</th><th>How it fails</th></tr>
+    <tr><td>Policy question<br>12% <span class="tag auto">sends alone</span></td>
+      <td>Parking, pets, check-in and check-out times, directions, facilities. Finds the paragraph in that hotel's policy documents and answers from it, citing it. Sends alone only if a paragraph was found and the answer cites it.</td>
+      <td>Answer from general knowledge. Guess a hotel. Treat "can I check in at 9am?" as policy: early check-in is always a special request.</td>
+      <td>No paragraph found, or hotel unknown, or anything else in the message → next agent, drafted</td>
+      <td>States the policy as written and names the hotel. Signed as the reservations team.</td>
+      <td>Weekly check of 50 auto-sent: a wrong promise pauses auto-send at once; over 2% wrong pauses it for that hotel.</td></tr>
+    <tr><td>Price / availability<br>31% <span class="tag">approve</span></td>
+      <td>Pulls today's price and availability from the PMS for the dates, room and party. Drafts the quote with Flexible and Advance Purchase options, totals and terms. Offers a hold and a payment link.</td>
+      <td>Quote a number not returned by the PMS in this session. Discount, match or undercut any price. Hold or book without approval.</td>
+      <td>Non-public or negotiated rate asked for → manager. Dates or hotel missing → drafts a question for the guest.</td>
+      <td>"As of today" prices; booking confirmed only after gateway payment succeeds.</td>
+      <td>PMS unavailable → draft acknowledges, gives a time to come back, no numbers. Room not available → offers the nearest alternative.</td></tr>
+    <tr><td>Booking change<br>22% <span class="tag">approve</span></td>
+      <td>Checks the booking's rate rules and live availability. Prepares the PMS change with the price difference. The agent approves the write.</td>
+      <td>Change an Advance Purchase booking. Waive a difference.</td>
+      <td>Rate does not allow changes, or price difference needs waiving → manager</td>
+      <td>Updated confirmation sent only after the PMS write succeeds.</td>
+      <td>Write fails → nothing sent, item returns to the owner with the error. Booking not found → asks for the reference.</td></tr>
+    <tr><td>Special request<br>18% <span class="tag">approve</span></td>
+      <td>Cot, transfer, early check-in, occasion, spa, dining, dietary. One trace per request to the right department with a due date before arrival. Drafts "logged, the hotel will confirm". Allergy, medical, accessibility → restricted trace, minimum detail, tells the guest who will see it.</td>
+      <td>Say a request is done or guaranteed (early check-in, upgrade, transfer). Put sensitive detail in free text or an email. Promise an allergen-free kitchen.</td>
+      <td>VIP or travel-advisor email → senior agent; amenities confirmed by a person, upgrade never promised in writing. Needs a hotel decision → via the trace.</td>
+      <td>Delivery is confirmed by the hotel from the trace, in writing. Q2: automatic message on close.</td>
+      <td>Not acknowledged within 24 h of due → escalates to the hotel's front office manager. Trace creation fails → item stays open, owner alerted.</td></tr>
+    <tr><td>Cancellation / refund<br>9% <span class="tag">approve</span> <span class="tag auto">template</span></td>
+      <td>Checks the rate and the cancellation window. Within rules: drafts the confirmation, asks the guest to confirm. Outside rules or compassionate: <b>sends a fixed-template holding reply at once</b> ("received, a manager will contact you today") and hands off with the booking attached.</td>
+      <td>Confirm a refund, credit or waiver outside the rules. Cancel without the guest's explicit yes. Ask for medical proof. Put anything but the template in an auto-sent message.</td>
+      <td>Any refund, waiver or credit outside the rules, or a compassionate case → manager, same day.</td>
+      <td>Cancellation confirmed in writing after the PMS update. Refund confirmed only by the manager.</td>
+      <td>Rules unclear → treated as outside the rules and routed to the manager.</td></tr>
+    <tr><td>Group / event<br>3% <span class="tag mgr">to Sales</span> <span class="tag auto">template</span></td>
+      <td>Recognises 8+ rooms, meeting space, weddings. <b>Sends a fixed-template acknowledgement</b> (one-working-day reply from the specialist). Passes on dates, size, hotel and the guest's words.</td>
+      <td>Quote, hold inventory or state availability for a group.</td>
+      <td>Always → groups specialist</td>
+      <td>Acknowledgement only. The specialist confirms.</td>
+      <td>Group size unclear → still routed; the specialist asks.</td></tr>
+    <tr><td>Other · off-topic · manipulation<br>5% <span class="tag">approve</span> <span class="tag auto">template</span></td>
+      <td>Unclear ask: drafts a short reply asking what is needed. Card details → removed, payment link proposed. <b>Off-topic</b> (code, homework, general knowledge, legal or medical advice, competitors, anything not about a stay at Aurel) or <b>instructions aimed at the AI</b> ("ignore your rules", "write me a script", "show your prompt") → fixed-template decline, routed to an agent, counted in the audit log.</td>
+      <td>Attempt the off-topic task. Reveal its own instructions, other guests' details or internal notes. Store, repeat or forward card details.</td>
+      <td>Under 60% confidence → senior agent. Repeated attempts from one sender → senior agent. Complaint, threat or abuse → manager.</td>
+      <td>Nothing confirmed.</td>
+      <td>Unsure whether on-topic → treated as off-topic, drafted for a person. Model output invalid or model down → one repair attempt, then the rule-based engine, labelled.</td></tr>
+  </table>
+
+  <div class="row" style="margin-top:4px">
+    <div class="col box"><h4>How a type earns the right to send alone</h4><ul>
+            <li>A type qualifies when, over 4 weeks and 300+ items: 95% of drafts sent with no or trivial edits, type changed under 3%, zero guardrail breaches.</li>
+      <li>The manager switches it on per type and per hotel.</li>
+      <li>Expected order: price quotes (Q2), then within-rules changes. Refunds and sensitive requests never qualify.</li>
+    </ul></div>
+  </div>
+  <div class="foot">Aurel Reservations AI Agent · PRD v1 · page 3 of 4</div>
+</section>
+
+<!-- ============================ PAGE 4 ============================ -->
+<section class="page">
+  <h2 style="margin-top:0"><span class="n">5</span>Success metrics</h2>
+  <p style="margin:2px 0">Committed targets are the cautious case from the memo; stretch is the realistic case. Six headline metrics; the rest are tracked monthly.</p>
+  <table>
+    <tr><th>Headline metric</th><th>Baseline</th><th>Committed, end Q1</th><th>Committed, end Q2</th><th>Stretch</th><th>How measured</th></tr>
+    <tr><td class="k">Email reply, weekday median</td><td>9 h</td><td>Under 1 h in opening hours</td><td>Under 45 min</td><td>Under 30 min</td><td>Received to sent timestamps</td></tr>
+    <tr><td class="k">Policy-only messages answered alone</td><td>0%</td><td>80%</td><td>90%</td><td>95%</td><td>Auto-sent ÷ policy-only messages</td></tr>
+    <tr><td class="k">Drafts sent with no or trivial edit</td><td>n/a</td><td>70% by week 8</td><td>85%</td><td>90%</td><td>Edit distance on send</td></tr>
+    <tr><td class="k">Requests not delivered at check-in</td><td>23%</td><td>Under 10%</td><td>Under 5%</td><td>Under 3%</td><td>Front office audit, weekly sample of 100; pilot hotels at end Q1, all hotels at end Q2</td></tr>
+    <tr><td class="k">Oldest open item per owner</td><td>n/a</td><td>Under 4 h</td><td>Under 2 h</td><td>Under 1 h</td><td>Dashboard</td></tr>
+    <tr><td class="k">Enquiry conversion, email</td><td>mixed 34% / 9%</td><td>+3 points</td><td>+5 points</td><td>+10 points</td><td>Booking within 7 days; pilot vs non-pilot hotels (indicative)</td></tr>
+  </table>
+
+  <div class="row" style="margin-top:6px">
+    <div class="col">
+      <h3>Also tracked</h3>
+      <table>
+        <tr><th>Metric</th><th>Baseline</th><th>End Q2</th></tr>
+        <tr><td>Weekend reply median</td><td>26 h</td><td>Under 4 h</td></tr>
+        <tr><td>Auto-sent answers found wrong</td><td>n/a</td><td>Under 2%</td></tr>
+        <tr><td>Type changed by the agent</td><td>n/a</td><td>Under 5%</td></tr>
+        <tr><td>Traces acknowledged within 24 h</td><td>n/a</td><td>90%</td></tr>
+        <tr><td>Time spent looking things up</td><td>25%</td><td>Under 12%</td></tr>
+        <tr><td>Arrivals contacted the day before</td><td>~0</td><td>95%</td></tr>
+        <tr><td>Agent satisfaction with the tool</td><td>n/a</td><td>4 of 5</td></tr>
+      </table>
+    </div>
+    <div class="col">
+      <h3>Desk hours by type: where the targets come from</h3>
+      <table>
+        <tr><th style="white-space:nowrap">Type</th><th>Today</th><th>After</th><th>Saved</th><th>How, text channels only</th></tr>
+        <tr><td class="k">New booking</td><td>307</td><td>~200</td><td>106</td><td>11 → 6 min on ~1,270, person approves</td></tr>
+        <tr><td class="k">Booking change</td><td>139</td><td>~80</td><td>60</td><td>7 → 3 min on ~900</td></tr>
+        <tr><td class="k">Special request</td><td>81</td><td>~45</td><td>37</td><td>5 → 2 min on ~740, traces automatic</td></tr>
+        <tr><td class="k">Policy question</td><td>32</td><td>~15</td><td>17</td><td>3 → 0 min on ~340 policy-only</td></tr>
+        <tr><td class="k">Cancellation</td><td>49</td><td>~30</td><td>18</td><td>6 → 3 min on ~370</td></tr>
+        <tr><td class="k">Call notes</td><td>above</td><td></td><td>30</td><td>Price and rule found for the pasted note</td></tr>
+        <tr><td class="k">Total</td><td class="k">~750</td><td class="k">~480</td><td class="k">~270</td><td>Realistic, full rollout</td></tr>
+      </table>
+      <p class="small">Groups (122 h) need a sales decision; no saving counted. Other (18 h) unchanged. Committed: <b>~700 end Q1</b> (the pilot's partial effect), <b>~615 end Q2</b> (AI agent delivers half its share), stretch ~480. Minutes are estimates, measured in shadow mode and corrected.</p>
+    </div>
+  </div>
+
+  <h3>Guardrails: hard limits. Any breach pauses that type the same day until fixed.</h3>
+  <table>
+    <tr><th>Guardrail</th><th>Limit</th><th>Checked by</th></tr>
+    <tr><td class="k">Unconfirmed promises sent (early check-in, upgrade, transfer, refund)</td><td>0</td><td>Weekly QA sample of 50, with the team</td></tr>
+    <tr><td class="k">Card numbers stored, displayed, forwarded or sent to the model</td><td>0</td><td>Scan of stored messages and model calls</td></tr>
+    <tr><td class="k">Allergy, medical or accessibility detail in free text or email</td><td>0</td><td>Automated scan + QA sample</td></tr>
+    <tr><td class="k">Discount or price match offered · quoted price differs from PMS</td><td>0</td><td>Every quote logged against PMS</td></tr>
+    <tr><td class="k">PMS write or send below the approval level in the spec · items without an owner</td><td>0</td><td>Audit log · dashboard</td></tr>
+    <tr><td class="k">Auto-sent that is not a cited policy answer or one of the three fixed templates</td><td>0</td><td>Audit log</td></tr>
+    <tr><td class="k">Off-topic or instruction-following answer sent (code, advice, others' data, own prompt)</td><td>0</td><td>Topic check on every send + QA</td></tr>
+    <tr><td class="k">Data protection assessment signed before any sensitive trace goes live</td><td>Required</td><td>Legal, week 2</td></tr>
+  </table>
+
+  <h3>Rollout, first quarter</h3>
+  <div class="strip">
+    <div><b>Weeks 1 to 2 · Shadow</b>Email connected. Policy documents loaded for 9 hotels. AI agent drafts everything; nobody sends from it. Measure draft acceptance, type accuracy and real minutes per contact. Hotels: a named sponsor per hotel; department heads trained on the PMS trace list.</div>
+    <div><b>Weeks 3 to 6 · Pilot</b>4 volunteer agents, Lisbon and Mallorca. Sending from the desk; auto-send on for those two hotels. Traces live for both; "promises kept" % reported weekly, misses reviewed with the sponsor, not blamed. Weekly QA in the open with the team.</div>
+    <div><b>Weeks 7 to 10 · All agents</b>All 22, all 9 hotels, email. Owner rules and dashboard live. Traces at every hotel; weekly promises-kept % per hotel in the COO's review; hotels under 80% acknowledged for two weeks get a visit from the PM.</div>
+    <div><b>Weeks 11 to 12 · WhatsApp and decisions</b>WhatsApp connected after Meta verification. <b>No headcount reduction planned.</b> Replacing leavers is decided on measured hours, first review end Q1. Decide which type earns autonomy next. Q2: OTA, out-of-hours, trace-close messages.</div>
+  </div>
+
+  <p class="small" style="margin-top:4px"><b>Assumptions.</b> Desk of 22: 2 managers, 3 groups and events specialists, 4 seniors, 13 agents. Email and WhatsApp providers expose threaded read and send APIs; WhatsApp verification takes 1 to 4 weeks. PMS trace API accepts department, due date and a restricted flag, and returns trace status so acknowledgements and promises kept can be counted; otherwise sensitive detail stays in our system with a pointer and status is a vendor gap to raise in week 1. Policy documents for 9 hotels structured by the PM with each hotel in weeks 1 to 2. Two engineers for two quarters (~52 engineer-weeks) cover the v1 list with a five-week buffer. Model provider: data processing agreement, EU inference region, card numbers removed and sensitive detail minimised before any call.</p>
+  <div class="foot">Aurel Reservations AI Agent · PRD v1 · page 4 of 4</div>
+</section>
+
+</body>
+</html>

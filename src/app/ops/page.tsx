@@ -1,6 +1,6 @@
 "use client";
 
-import { useStore } from "@/lib/store";
+import { useSessionGuard, useStore } from "@/lib/store";
 import { Badge, Button, fmtDate } from "@/components/ui";
 import { DEPARTMENT_LABEL, HOTELS, type Trace } from "@/lib/pms";
 import { HANDOFF_LABEL } from "@/lib/agent/schema";
@@ -37,8 +37,9 @@ function TraceRow({ t, onStatus }: { t: Trace; onStatus: (s: Trace["status"]) =>
 }
 
 export default function Ops() {
+  const session = useSessionGuard();
   const { state, dispatch } = useStore();
-  if (!state.hydrated) return <div className="p-6 text-sm text-stone-500">Loading…</div>;
+  if (!state.hydrated || !session) return <div className="p-6 text-sm text-stone-500">Loading…</div>;
 
   const byHotel = HOTELS.map((h) => ({ hotel: h, traces: state.traces.filter((t) => t.hotelId === h.id) })).filter((x) => x.traces.length);
   const open = state.traces.filter((t) => t.status !== "done").length;
@@ -46,9 +47,12 @@ export default function Ops() {
   return (
     <div className="mx-auto max-w-[1100px] w-full p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Hotel traces</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold tracking-tight">PMS trace list</h1>
+          <Badge tone="amber">simulated PMS view</Badge>
+        </div>
         <p className="text-sm text-stone-600 mt-1 max-w-2xl">
-          What the hotel teams see. Every special request approved on the desk lands here as a PMS trace with an owner, a due date and a restricted flag where needed, instead of a line in the free-text notes field read on the day of arrival.
+          In the real product this screen does not exist: the AI agent writes each trace into the hotel&apos;s PMS and the department works it there. This page stands in for that PMS list so you can see what lands at the hotel, acknowledge it and mark it done. The dashboard reads &quot;promises kept&quot; from these statuses.
         </p>
         <div className="mt-3 flex gap-2 text-xs">
           <Badge tone={open ? "amber" : "green"}>{open} open</Badge>
@@ -58,9 +62,7 @@ export default function Ops() {
       </div>
 
       {byHotel.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">
-          No traces yet. Approve a reply on the Desk that includes a special request and it will appear here.
-        </div>
+        <div className="rounded-lg border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">No traces yet. Approve a reply on the Desk that includes a special request and it will appear here.</div>
       ) : (
         byHotel.map(({ hotel, traces }) => (
           <section key={hotel.id} className="space-y-2">
@@ -100,7 +102,7 @@ export default function Ops() {
 
       {state.bookingUpdates.length ? (
         <section className="space-y-2">
-          <h2 className="font-medium">Bookings modified</h2>
+          <h2 className="font-medium">Bookings modified in the PMS</h2>
           <ul className="space-y-1 text-sm">
             {state.bookingUpdates.map((b, i) => (
               <li key={i} className="rounded-md border border-stone-200 bg-white p-3">
