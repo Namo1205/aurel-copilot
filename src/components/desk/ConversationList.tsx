@@ -99,11 +99,11 @@ export function ConversationList({
                       {waiting && ageMin >= 60 ? (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
                           <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
-                          SLA {Math.floor(ageMin / 60)}h{ageMin % 60 ? ` ${ageMin % 60}m` : ""}
+                          Waiting {Math.floor(ageMin / 60)}h{ageMin % 60 ? ` ${ageMin % 60}m` : ""}
                         </span>
                       ) : waiting && ageMin >= 30 ? (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
-                          ⏳ {ageMin}m
+                          Waiting {ageMin}m
                         </span>
                       ) : null}
                       <span className={`text-xs tabular-nums ${stale ? "text-rose-700 font-medium" : "text-stone-400"}`}>{timeAgo(c.lastActivity)}</span>

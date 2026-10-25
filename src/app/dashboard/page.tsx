@@ -205,6 +205,7 @@ export default function Dashboard() {
                     className="ml-auto text-[11px] rounded border border-stone-300 bg-white px-1 py-0.5"
                     title="Reassign"
                   >
+                    {!i.ownerId ? <option value="">Unassigned</option> : null}
                     {ROSTER.filter((s) => isOnShift(s, new Date(now), state.shiftOverrides) || s.id === i.ownerId).map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}

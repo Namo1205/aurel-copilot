@@ -5,13 +5,20 @@ import { Badge, Button, fmtDate } from "@/components/ui";
 import { DEPARTMENT_LABEL, HOTELS, type Trace } from "@/lib/pms";
 import { HANDOFF_LABEL } from "@/lib/agent/schema";
 
-function TraceRow({ t, onStatus }: { t: Trace; onStatus: (s: Trace["status"]) => void }) {
+// "Aurel Assistant:m-001" and "day-before check" are how traces record where they came from.
+function sourceLabel(source: string, guestName?: string): string {
+  if (source === "day-before check") return "day-before check";
+  if (source.startsWith("Aurel Assistant:") || source.startsWith("AI agent:")) return guestName ? `logged by Aurel Assistant from ${guestName}'s message` : "logged by Aurel Assistant";
+  return source;
+}
+
+function TraceRow({ t, onStatus, guestName }: { t: Trace; onStatus: (s: Trace["status"]) => void; guestName?: string }) {
   return (
     <li className={`rounded-md border p-3 text-sm ${t.status === "done" ? "border-stone-200 bg-stone-50 opacity-70" : t.sensitive ? "border-rose-200 bg-rose-50/40" : "border-stone-200 bg-white"}`}>
       <div className="flex items-center gap-2 flex-wrap">
         <Badge tone="brand">{DEPARTMENT_LABEL[t.department]}</Badge>
         <span className="text-xs text-stone-500">due {fmtDate(t.due)}</span>
-        {t.bookingId ? <span className="font-mono text-xs text-stone-500">{t.bookingId}</span> : null}
+        {t.bookingId ? <span className="text-xs text-stone-500">{t.bookingId}</span> : null}
         {t.sensitive ? <Badge tone="rose" title="Restricted: special category data. Visible to the owning department only.">restricted</Badge> : null}
         <span className="ml-auto flex gap-1">
           {t.status === "open" ? (
@@ -30,7 +37,7 @@ function TraceRow({ t, onStatus }: { t: Trace; onStatus: (s: Trace["status"]) =>
       </div>
       <p className="mt-1.5 text-stone-800">{t.summary}</p>
       <div className="mt-1 text-[11px] text-stone-500">
-        {t.status} · created {new Date(t.createdAt).toLocaleString("en-GB")} · source {t.source}
+        {t.status} · created {new Date(t.createdAt).toLocaleString("en-GB")} · {sourceLabel(t.source, guestName)}
       </div>
     </li>
   );
@@ -42,6 +49,8 @@ export default function Ops() {
   if (!state.hydrated || !session) return <div className="p-6 text-sm text-stone-500">Loading…</div>;
 
   const byHotel = HOTELS.map((h) => ({ hotel: h, traces: state.traces.filter((t) => t.hotelId === h.id) })).filter((x) => x.traces.length);
+  // The guest behind a trace or a handoff, from the message it came from.
+  const guestFor = (ref: string) => state.items[ref.replace(/^(Aurel Assistant|AI agent):/, "")]?.message.fromName;
   const open = state.traces.filter((t) => t.status !== "done").length;
 
   return (
@@ -74,7 +83,7 @@ export default function Ops() {
               {[...traces]
                 .sort((a, b) => a.due.localeCompare(b.due))
                 .map((t) => (
-                  <TraceRow key={t.id} t={t} onStatus={(s) => dispatch({ type: "trace_status", traceId: t.id, status: s })} />
+                  <TraceRow key={t.id} t={t} guestName={guestFor(t.source)} onStatus={(s) => dispatch({ type: "trace_status", traceId: t.id, status: s })} />
                 ))}
             </ul>
           </section>
@@ -90,7 +99,7 @@ export default function Ops() {
                 <div className="flex items-center gap-2">
                   <Badge tone="amber">{HANDOFF_LABEL[h.to as keyof typeof HANDOFF_LABEL] ?? h.to}</Badge>
                   <span className="text-xs text-stone-500">{h.urgency.replace("_", " ")}</span>
-                  <span className="ml-auto text-[11px] text-stone-500">from {h.messageId}</span>
+                  <span className="ml-auto text-[11px] text-stone-500">{guestFor(h.messageId) ? `from ${guestFor(h.messageId)}` : ""}</span>
                 </div>
                 <p className="mt-1 text-stone-800">{h.reason}</p>
                 <p className="mt-0.5 text-xs text-stone-600">{h.context}</p>
@@ -106,7 +115,7 @@ export default function Ops() {
           <ul className="space-y-1 text-sm">
             {state.bookingUpdates.map((b, i) => (
               <li key={i} className="rounded-md border border-stone-200 bg-white p-3">
-                <span className="font-mono text-xs">{b.id}</span> · {fmtDate(b.checkIn)} → {fmtDate(b.checkOut)} · {b.roomType} · EUR {b.nightlyRate}/night · {b.status}
+                <span className="font-medium">{b.id}</span> · {fmtDate(b.checkIn)} to {fmtDate(b.checkOut)} · {b.roomType} · EUR {b.nightlyRate}/night · {b.status}
               </li>
             ))}
           </ul>
