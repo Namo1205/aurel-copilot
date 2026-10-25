@@ -145,7 +145,7 @@ export default function About() {
       <section className="space-y-2 text-sm text-stone-600">
         <h2 className="font-medium text-stone-900">What is simulated</h2>
         <ul className="list-disc pl-5 space-y-1 text-xs leading-relaxed">
-          <li>Email arrives live from a Gmail mailbox when one is connected; otherwise, and for WhatsApp, from seeded messages and the &quot;New message&quot; form. Desk state lives in your browser.</li>
+          <li>Email is the only channel in this version; it arrives live from a Gmail mailbox when one is connected, otherwise from the sample messages and the &quot;Simulate an inbound email&quot; form. WhatsApp and OTA messaging follow next quarter (see the PRD). Desk state lives in your browser.</li>
           <li>The PMS is a mock with nine hotels, rate plans, bookings and daily prices. Writes happen only at published rates. The handbooks are real files; the hotels in them are fictional.</li>
           <li>The PMS traces page stands in for the hotel&apos;s own PMS list; hotel staff are not users of this product.</li>
           <li>The payment link is a placeholder. Phone is out of scope.</li>

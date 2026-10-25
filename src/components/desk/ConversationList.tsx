@@ -59,7 +59,7 @@ export function ConversationList({
           );
         })}
         {onCompose ? (
-          <button onClick={onCompose} className="ml-auto h-7 w-7 grid place-items-center rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-900 text-lg leading-none" title="Add a simulated inbound message">
+          <button onClick={onCompose} className="ml-auto h-7 w-7 grid place-items-center rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-900 text-lg leading-none" title="Add a simulated inbound email">
             +
           </button>
         ) : null}
