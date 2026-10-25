@@ -126,18 +126,20 @@ Set `GMAIL_SEND=off` to read live mail but send nothing. Mail the desk has taken
 
 ### Replies with no desk tab open
 
-Desk tabs poll the mailbox every 20 seconds, so with every tab closed nothing is read. The scheduled check fills that gap for the types that may send alone. A GitHub Actions workflow ([.github/workflows/poll-mailbox.yml](.github/workflows/poll-mailbox.yml)) calls `GET /api/cron/poll` every five minutes with a bearer token. That route reads new mail and:
+Desk tabs poll the mailbox every 20 seconds, so with every tab closed nothing is read. The scheduled check fills that gap for the types that may send alone: anything that calls `GET /api/cron/poll` with `Authorization: Bearer <CRON_SECRET>` every few minutes. That route reads new mail and:
 
 - sends the cited policy answer, the question asking which hotel, the group acknowledgement, the holding reply or the off-topic decline, then labels the message `Aurel/Auto-replied` and leaves it unread, so the next desk tab still receives it and shows the reply in the thread;
 - labels everything that needs a person `Aurel/Waiting` and leaves it alone for the desk.
 
-Nothing is stored on the server; the Gmail labels are the whole state. Two costs to know about: a message the check has seen is sorted again when a desk tab takes it, so on the free Gemini tier every live email costs roughly double while the schedule is on; and GitHub runs schedules at best every five minutes, often a few minutes late. To switch it on:
+Nothing is stored on the server; the Gmail labels are the whole state, so any number of schedulers may call the route and a message is still answered once. One run stops taking new mail after 75 seconds and reports `remaining`; the next run continues. One cost to know about: a message the check has seen is sorted again when a desk tab takes it, so on the free Gemini tier every live email costs roughly double while the schedule is on.
 
-1. Set `CRON_SECRET` in `.env.local` and on Vercel (`openssl rand -base64 32`).
-2. In the GitHub repository, Settings → Secrets and variables → Actions, add `DESK_URL` (the deployment, no trailing slash) and `CRON_SECRET` (same value).
-3. Push to the default branch. Run it once by hand from the Actions tab to check the response: `{"checked":n,"replied":[…],"waiting":[…]}`.
+Three schedulers, in the order they matter:
 
-Without `CRON_SECRET` the route answers 503 and the workflow fails loudly instead of silently doing nothing.
+1. **cron-job.org** (free, the one that actually fires every five minutes). Set `CRON_SECRET` in `.env.local` and on Vercel (any long random string). At [cron-job.org](https://cron-job.org) create a job: URL `https://<your deployment>/api/cron/poll`, every 5 minutes, and under Advanced add the request header `Authorization` with the value `Bearer <CRON_SECRET>`. Its run history shows the route's JSON: `{"checked":n,"remaining":0,"replied":[…],"waiting":[…]}`.
+2. **Vercel's own cron** ([vercel.json](vercel.json)) runs the route once a day; the free plan allows no more. Vercel sends the same bearer header itself when `CRON_SECRET` is set, so this is a backstop that needs no setup: at least one unattended pass a day even if the pinger is down.
+3. **GitHub Actions** ([.github/workflows/poll-mailbox.yml](.github/workflows/poll-mailbox.yml)) is scheduled every five minutes but GitHub runs schedules only when it has capacity: measured on this repository, once in five hours. Keep it as a free extra, not as the plan. It needs the repository secrets `DESK_URL` (the deployment, no trailing slash) and `CRON_SECRET`; the Actions tab has a "Run workflow" button for a manual check.
+
+Without `CRON_SECRET` the route answers 503, so every scheduler fails loudly instead of silently doing nothing. To test: send a mail to the desk mailbox from another address, do not open it in Gmail (the check takes unread mail only), and wait one interval.
 
 ## How the prototype is built
 

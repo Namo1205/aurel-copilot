@@ -4,10 +4,19 @@ import { analyze } from "@/lib/agent";
 import { checkCronSecret, cronConfigured } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
-// The scheduled mailbox check. Called every five minutes by the GitHub Actions
-// workflow in .github/workflows/poll-mailbox.yml with "Authorization: Bearer CRON_SECRET".
+// One run stops taking new messages after this long; what is left stays unlabelled
+// for the next run. A single Gemini sort can take 40 s, and the function is cut off
+// at maxDuration with nothing reported.
+const BUDGET_MS = 75_000;
+
+// The scheduled mailbox check. Called every few minutes with
+// "Authorization: Bearer CRON_SECRET" by whichever scheduler is set up: an external
+// pinger (cron-job.org), Vercel's own daily cron (vercel.json, which sends the same
+// header on its own) and the best-effort GitHub Actions workflow in
+// .github/workflows/poll-mailbox.yml. Any number of them may run; the labels keep
+// a message from being answered twice.
 //
 // It reads new mail and sends only what the AI agent may send alone: a cited policy
 // answer or one of the fixed templates. Those messages are labelled Aurel/Auto-replied
@@ -21,13 +30,19 @@ export async function GET(req: Request) {
   if (!gmailSendEnabled()) return NextResponse.json({ skipped: "GMAIL_SEND=off: the scheduled check only runs when it may send." });
 
   const started = Date.now();
-  const replied: { id: string; from: string; kind: string; category: string; engine: string }[] = [];
-  const waiting: { id: string; from: string; category: string }[] = [];
+  const replied: { id: string; from: string; kind: string; category: string; engine: string; tookMs: number }[] = [];
+  const waiting: { id: string; from: string; category: string; engine: string; tookMs: number }[] = [];
   const errors: { id: string; error: string }[] = [];
+  let remaining = 0;
   try {
     const messages = await listNewMessages({ max: 10, excludeLabels: [LABELS.autoReplied, LABELS.waiting] });
-    for (const msg of messages) {
+    for (const [i, msg] of messages.entries()) {
+      if (Date.now() - started > BUDGET_MS) {
+        remaining = messages.length - i;
+        break;
+      }
       const id = msg.gmail!.id;
+      const t0 = Date.now();
       try {
         await attachThreadContext(msg);
         const a = await analyze(msg);
@@ -36,17 +51,17 @@ export async function GET(req: Request) {
         if (auto.kind !== "none" && body) {
           await sendReply({ message: msg, body });
           await addLabels(id, [LABELS.autoReplied]);
-          replied.push({ id, from: msg.from, kind: auto.kind, category: a.proposal.triage.category, engine: a.engine });
+          replied.push({ id, from: msg.from, kind: auto.kind, category: a.proposal.triage.category, engine: a.engine, tookMs: Date.now() - t0 });
         } else {
           await addLabels(id, [LABELS.waiting]);
-          waiting.push({ id, from: msg.from, category: a.proposal.triage.category });
+          waiting.push({ id, from: msg.from, category: a.proposal.triage.category, engine: a.engine, tookMs: Date.now() - t0 });
         }
       } catch (e) {
         // Left untouched: the next run tries again.
         errors.push({ id, error: e instanceof Error ? e.message : String(e) });
       }
     }
-    return NextResponse.json({ checked: messages.length, replied, waiting, errors, ms: Date.now() - started });
+    return NextResponse.json({ checked: messages.length - remaining, remaining, replied, waiting, errors, ms: Date.now() - started });
   } catch (e) {
     return NextResponse.json({ replied, waiting, errors, error: e instanceof Error ? e.message : String(e) }, { status: 502 });
   }
