@@ -253,9 +253,13 @@ export function Thread({ conversation }: { conversation: Conversation }) {
       }
       if (!r.ok) {
         const j = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(j.error ?? `Could not send (${r.status}).`);
+        throw new Error(`${j.error ?? `Could not send (${r.status}).`} Nothing was sent or written.`);
       }
       const result = (await r.json()) as ExecutionResult;
+      if (result.blocked) {
+        setSendError(result.blocked);
+        return;
+      }
       dispatch({ type: "executed", id, result, status: sendReply ? "sent" : "handed_off", by: session.staffId });
       setFiles([]);
     } catch (e) {
@@ -510,7 +514,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
             </div>
             {gapLine(gaps)}
             {attachError ? <p className="mt-2 text-xs text-rose-700">{attachError}</p> : null}
-            {sendError ? <p className="mt-2 text-xs text-rose-700">{sendError} Nothing was sent or written.</p> : null}
+            {sendError ? <p className="mt-2 text-xs text-rose-700">{sendError}</p> : null}
           </>
         )}
       </div>

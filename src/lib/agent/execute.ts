@@ -1,6 +1,6 @@
 // Executes the actions a human approved. This is the only place PMS writes happen.
 
-import { applyModification, createTrace, getBooking, type Booking, type Trace } from "@/lib/pms";
+import { applyModification, checkModification, createTrace, getBooking, type Booking, type Trace } from "@/lib/pms";
 import type { InboundMessage } from "@/lib/inbox/seed";
 import type { AgentProposal, ProposedAction } from "./schema";
 import { redactCards } from "./rules";
@@ -27,7 +27,15 @@ export interface ExecutionResult {
   handoffs: Handoff[];
   paymentLinks: string[];
   skipped: { action: ProposedAction; reason: string }[];
+  // Set when nothing was done or sent: the reason, for the owner. PRD: a write that fails
+  // sends nothing and returns the item with the error.
+  blocked?: string;
 }
+
+// Does the reply tell the guest a booking change has already been made?
+const CLAIMS_CHANGE = /\b(have|has been|is now|we've|i've|has now been|are now)\s+(successfully\s+)?(updated|changed|moved|modified|amended|rebooked)\b[^.]{0,80}\b(reservation|booking|dates|stay)\b|\b(reservation|booking)\b[^.]{0,40}\b(has been|is now)\s+(updated|changed|moved|modified|amended)/i;
+
+type ChangeAction = Extract<ProposedAction, { type: "modify_booking" }>;
 
 export function execute(input: {
   message: InboundMessage;
@@ -40,6 +48,20 @@ export function execute(input: {
   const { message, proposal, approvedActionIndexes, draftReply, sendReply, attachments } = input;
   const result: ExecutionResult = { sentReply: null, traces: [], bookingUpdates: [], handoffs: [], paymentLinks: [], skipped: [] };
   const now = new Date().toISOString();
+
+  // Guardrails before anything is written or sent. A reply never confirms a change the
+  // PMS did not make: the change is checked first, and a reply that says "we have moved
+  // your booking" cannot go out while that change is unticked.
+  const changes = proposal.actions.map((a, i) => ({ a, i })).filter((x): x is { a: ChangeAction; i: number } => x.a.type === "modify_booking");
+  for (const { a, i } of changes) {
+    if (!approvedActionIndexes.includes(i)) continue;
+    const b = getBooking(a.bookingId);
+    const chk = b ? checkModification(b, a.changes) : { allowed: false, reason: "Booking not found." };
+    if (!chk.allowed) return { ...result, blocked: `The PMS change for ${a.bookingId} could not be made: ${chk.reason} Nothing was sent; the conversation stays with you.` };
+  }
+  if (sendReply && changes.some(({ i }) => !approvedActionIndexes.includes(i)) && CLAIMS_CHANGE.test(draftReply)) {
+    return { ...result, blocked: "The reply tells the guest the booking has been changed, but the change is unticked. Tick it, or reword the reply. Nothing was sent." };
+  }
 
   for (const idx of approvedActionIndexes) {
     const action = proposal.actions[idx];
