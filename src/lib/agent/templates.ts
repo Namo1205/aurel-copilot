@@ -34,6 +34,16 @@ export const TEMPLATES = {
       opts.channel === "whatsapp" ? "Aurel Reservations" : "Warm regards,\nAurel Reservations",
     ].join("\n\n"),
 
+  // A price quote that has had no reply for two days. Prepared for the owner, approved by
+  // a person, never sent alone. Does not repeat the price: rates are live.
+  quote_follow_up: (opts: { name: string; hotel?: string; dates?: string; roomName?: string; channel: Channel }) =>
+    [
+      opts.channel === "whatsapp" ? `Hi ${opts.name},` : `Dear ${opts.name},`,
+      `I wanted to check whether you are still considering ${opts.hotel ?? "a stay with us"}${opts.dates ? ` for ${opts.dates}` : ""}${opts.roomName ? `, in a ${opts.roomName}` : ""}. Rates are live and may have moved since I wrote, so I am happy to check again and hold a room for you if the dates still work.`,
+      "If your plans have changed, no reply is needed. If there is anything I can clarify, just write back.",
+      opts.channel === "whatsapp" ? "Aurel Reservations" : "Warm regards,\nAurel Reservations",
+    ].join("\n\n"),
+
   day_before: (opts: { name: string; hotel: string; checkIn: string; channel: Channel }) =>
     [
       opts.channel === "whatsapp" ? `Hi ${opts.name},` : `Dear ${opts.name},`,

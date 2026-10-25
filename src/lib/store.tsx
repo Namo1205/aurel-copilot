@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { SEED_MESSAGES, type InboundMessage } from "@/lib/inbox/seed";
 import type { AnalysisResult } from "@/lib/agent";
 import type { ExecutionResult, Handoff } from "@/lib/agent/execute";
-import { CATEGORY_LABEL, type AutoSend, type Category } from "@/lib/agent/schema";
+import { CATEGORY_LABEL, type AutoSend, type Category, type ProposedAction } from "@/lib/agent/schema";
 import type { Booking, Trace } from "@/lib/pms";
 import { BOOKINGS, createTrace, getBooking, getGuest, getHotel } from "@/lib/pms";
 import { TEMPLATES } from "@/lib/agent/templates";
@@ -43,6 +43,8 @@ export interface InboxItem {
   delivery?: { via: "gmail"; at: string; error?: string };
   // Every owner change: arrival, manual reassign, shift-end handover.
   ownerHistory?: OwnerChange[];
+  // A price quote that got no reply: a prepared nudge for the owner. Never sent alone.
+  followUp?: { suggestedAt: string; draft: string; dismissedAt?: string; sentAt?: string };
 }
 
 export interface OwnerChange {
@@ -65,7 +67,7 @@ export const NOBODY_TO_HAND_TO = "Owner off shift, nobody to hand to";
 // Notifications. Only things the conversation list cannot show by itself: changes
 // made to someone's work while they were not looking, and anything that failed.
 // "A new message arrived" is never an event; the list is the inbox.
-export type EventKind = "delivery_failed" | "moved_to_you" | "guest_replied" | "overdue" | "team_overdue" | "stuck_handover" | "manager_decision" | "shift_ending";
+export type EventKind = "delivery_failed" | "moved_to_you" | "guest_replied" | "overdue" | "team_overdue" | "stuck_handover" | "manager_decision" | "shift_ending" | "quote_followup";
 export type EventGroup = "needs" | "changed" | "today";
 export interface DeskEvent {
   id: string;
@@ -148,6 +150,7 @@ export type Action =
   | { type: "shift_tick"; now: string }
   | { type: "notifications_seen"; staffId: string }
   | { type: "mailbox_sync"; sync: Partial<State["mailboxSync"]> }
+  | { type: "followup_dismiss"; id: string }
   | { type: "list_opened"; staffId: string }
   | { type: "list_left"; staffId: string; at: string }
   | { type: "reset" };
@@ -314,6 +317,46 @@ function tickEvents(state: State, now: Date): NewEvent[] {
     out.push({ key: `shift_ending:${s.id}:${day}`, at, kind: "shift_ending", group: "today", to: s.id, title: `Your shift ends at ${s.shift.end}`, detail: `${open} conversation${open === 1 ? "" : "s"} still open. Anything left moves to a colleague on shift by the owner rule.` });
   }
   return out;
+}
+
+// A quote with no reply after this long gets a prepared follow-up. Override for rehearsals.
+const QUOTE_FOLLOW_UP_HOURS = Number(process.env.NEXT_PUBLIC_QUOTE_FOLLOW_UP_HOURS ?? 48) || 48;
+const QUOTE_FOLLOW_UP_MS = QUOTE_FOLLOW_UP_HOURS * 3600000;
+const followUpAge = QUOTE_FOLLOW_UP_HOURS >= 48 ? `${Math.round(QUOTE_FOLLOW_UP_HOURS / 24)} days` : QUOTE_FOLLOW_UP_HOURS >= 1 ? `${Math.round(QUOTE_FOLLOW_UP_HOURS)} hours` : "a while";
+
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+}
+
+// Once a minute: a reply that carried a price quote, sent by a person, with no newer guest
+// message in the conversation, gets one follow-up suggestion and one bell event. One per quote.
+function withFollowUps(state: State, now: Date): State {
+  const at = now.toISOString();
+  const items = { ...state.items };
+  const events: NewEvent[] = [];
+  let changed = false;
+  for (const id of state.order) {
+    const it = items[id];
+    if (it.status !== "sent" || !it.result?.sentReply || it.followUp) continue;
+    const p = it.analysis?.proposal;
+    if (!p) continue;
+    const quote = p.actions.find((a): a is Extract<ProposedAction, { type: "quote" }> => a.type === "quote");
+    if (!quote && p.triage.category !== "new_booking_enquiry") continue;
+    const sentAt = Date.parse(it.result.sentReply.sentAt);
+    if (now.getTime() - sentAt < QUOTE_FOLLOW_UP_MS) continue;
+    const key = convKey(it.message);
+    const newer = state.order.some((o) => o !== id && convKey(state.items[o].message) === key && Date.parse(state.items[o].receivedAt) > sentAt);
+    if (newer) continue;
+    const hotel = p.triage.hotelId ? getHotel(p.triage.hotelId) : undefined;
+    const first = it.message.fromName.replace(/^Unknown.*$/, "").split(/[ ,]/)[0] || "guest";
+    const dates = quote ? `${shortDate(quote.checkIn)} to ${shortDate(quote.checkOut)}` : undefined;
+    const draft = TEMPLATES.quote_follow_up({ name: first, hotel: hotel?.name, dates, roomName: quote?.roomName, channel: it.message.channel });
+    items[id] = { ...it, followUp: { suggestedAt: at, draft } };
+    changed = true;
+    const to = it.handledBy && it.handledBy !== AI_OWNER_ID && it.handledBy !== MAILBOX_OWNER_ID ? it.handledBy : (it.ownerId ?? "role:senior");
+    events.push({ key: `followup:${id}`, at, kind: "quote_followup", group: "needs", to, title: `Quote not answered in ${followUpAge}`, detail: `${it.message.fromName}${hotel ? ` · ${hotel.name}` : ""}${dates ? ` · ${dates}` : ""}. A follow-up is ready in the thread.`, itemId: id });
+  }
+  return changed ? withEvents({ ...state, items }, events) : state;
 }
 
 // When people go off shift, every pending item they own moves by the same owner rule
@@ -646,6 +689,7 @@ export function reducer(state: State, action: Action): State {
         handledAt: nowIso,
         handledBy: action.by,
         edited: true,
+        followUp: it.followUp && !it.followUp.sentAt && !it.followUp.dismissedAt ? { ...it.followUp, sentAt: nowIso } : it.followUp,
       });
     }
     case "shift_override": {
@@ -662,7 +706,13 @@ export function reducer(state: State, action: Action): State {
         for (const s of ended) overrides[s.id] = "off";
         next = handoverFrom({ ...state, shiftOverrides: overrides }, ended.map((s) => s.id), now, "shift end");
       }
+      next = withFollowUps(next, now);
       return withEvents(next, tickEvents(next, now));
+    }
+    case "followup_dismiss": {
+      const it = state.items[action.id];
+      if (!it?.followUp) return state;
+      return patch(state, action.id, { followUp: { ...it.followUp, dismissedAt: new Date().toISOString() } });
     }
     case "notifications_seen":
       return { ...state, notificationsSeenAt: { ...state.notificationsSeenAt, [action.staffId]: new Date().toISOString() } };

@@ -126,6 +126,7 @@ export function ConversationList({
                     {m.attachments?.length ? <span className="shrink-0 text-stone-400" title={m.attachments.map((a) => a.name).join(", ")}>· 📎 {m.attachments.length}</span> : null}
                     {it.status === "analyzing" || it.status === "new" ? <span className="ml-auto shrink-0 text-stone-400">Sorting…</span> : null}
                     {waiting && it.autoSentAt ? <span className="ml-auto shrink-0 text-amber-700">Needs decision</span> : null}
+                    {!waiting && it.followUp && !it.followUp.sentAt && !it.followUp.dismissedAt ? <span className="ml-auto shrink-0 text-amber-700">Follow-up suggested</span> : null}
                   </div>
                 </div>
               </button>

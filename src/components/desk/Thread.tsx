@@ -142,7 +142,12 @@ export function Thread({ conversation }: { conversation: Conversation }) {
   const [busy, setBusy] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [now] = useState(() => new Date());
+  // A quote that got no reply: the prepared follow-up is offered in the reply box.
+  const latestItem = conversation.open ?? conversation.latest;
+  const pendingFollowUp = !conversation.open && latestItem.followUp && !latestItem.followUp.sentAt && !latestItem.followUp.dismissedAt ? latestItem.followUp : null;
   const [manualText, setManualText] = useState("");
+  // While a follow-up is pending and the box is empty, the box shows the suggested text.
+  const followUpText = manualText || pendingFollowUp?.draft || "";
   const [files, setFiles] = useState<File[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
   const onFiles = (next: File[], error: string | null) => {
@@ -212,7 +217,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
   // Guardrail in code: a reply with a placeholder still in it cannot be sent.
   const currentDraft = open && p ? (open.draft ?? (replyMode === "manual" ? "" : p.draftReply)) : "";
   const gaps = draftGaps(currentDraft);
-  const manualGaps = draftGaps(manualText);
+  const manualGaps = draftGaps(conversation.open ? manualText : followUpText);
   const gapLine = (list: string[]) => (list.length ? <p className="mt-2 text-xs text-rose-700">Fill in before sending: {list.join(", ")}</p> : null);
 
   useEffect(() => {
@@ -359,6 +364,15 @@ export function Thread({ conversation }: { conversation: Conversation }) {
       <div className="border-t border-stone-200 bg-white px-5 py-4 shrink-0">
         {!open ? (
           <div className="space-y-2.5">
+            {pendingFollowUp ? (
+              <div className="flex items-center gap-2 text-xs rounded-lg border border-amber-200 bg-amber-50/70 text-amber-900 px-3 py-2">
+                <span className="font-medium">Suggested follow-up:</span>
+                <span>the quote sent {ago(head.result?.sentReply?.sentAt ?? head.handledAt ?? head.receivedAt)} has had no reply. Edit the text below or send it as it is.</span>
+                <button onClick={() => dispatch({ type: "followup_dismiss", id })} className="ml-auto underline underline-offset-2 hover:text-amber-950">
+                  No follow-up
+                </button>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between text-xs text-stone-500">
               <span className="font-semibold text-stone-700 flex items-center gap-1.5">
                 Reply or follow up to {m.fromName}
@@ -368,15 +382,15 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               </span>
             </div>
             <textarea
-              value={manualText}
+              value={followUpText}
               onChange={(e) => setManualText(e.target.value)}
-              rows={3}
+              rows={pendingFollowUp ? 6 : 3}
               placeholder={`Write to ${m.fromName}…`}
               className={boxClass}
               {...dropHandlers}
             />
             <div className="flex items-center gap-2 flex-wrap">
-              <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim() || manualGaps.length > 0}>
+              <Button onClick={() => sendManualReply(followUpText, id)} disabled={busy || !followUpText.trim() || manualGaps.length > 0}>
                 {busy ? "Sending…" : "Send"}
               </Button>
               {m.gmail ? <AttachmentPicker files={files} onChange={onFiles} disabled={busy} /> : null}
