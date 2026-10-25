@@ -48,6 +48,8 @@ function LoginForm() {
     try {
       const r = await restoreFromMailbox(dispatch);
       setNote(`Reloaded the last ${r.days} days: ${r.closed} answered conversation${r.closed === 1 ? "" : "s"} restored, ${r.reopened} reopened for sorting.`);
+      // Restored conversations are closed, so show the Done view rather than an empty Open list.
+      if (r.closed || r.reopened) router.replace(r.closed ? "/?tab=done" : "/?tab=all");
     } catch (e) {
       setNote(e instanceof Error ? e.message : String(e));
     }

@@ -155,7 +155,11 @@ function DeskInner() {
                   onClick={() => {
                     setReloadNote("Reading the mailbox…");
                     restoreFromMailbox(dispatch)
-                      .then((r) => setReloadNote(`${r.closed} answered restored, ${r.reopened} reopened.`))
+                      .then((r) => {
+                        setReloadNote(`${r.closed} answered restored, ${r.reopened} reopened.`);
+                        // Closed conversations live in Done; open the view that has them.
+                        if (r.closed || r.reopened) setViewId(views.some((v) => v.id === "done") && r.closed ? "done" : views[0].id);
+                      })
                       .catch((e) => setReloadNote(e instanceof Error ? e.message : String(e)));
                   }}
                   className="text-brand underline"
