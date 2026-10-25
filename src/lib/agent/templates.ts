@@ -26,6 +26,14 @@ export const TEMPLATES = {
       opts.channel === "whatsapp" ? "Aurel Reservations" : "Warm regards,\nAurel Reservations",
     ].join("\n\n"),
 
+  // A policy question with no hotel in it. Contains no fact and no promise, so it may go alone.
+  ask_hotel: (opts: { name: string; channel: Channel }) =>
+    [
+      opts.channel === "whatsapp" ? `Hi ${opts.name},` : `Dear ${opts.name},`,
+      "Happy to help. Which of our hotels are you asking about? We have Aurel Lisboa, Madrid, Roma, Athens, Comporta, Mallorca, Amalfi, Santorini and Algarve, and details such as check-in and check-out times, parking and pets differ between them. Reply with the hotel and I will come straight back with the answer.",
+      opts.channel === "whatsapp" ? "Aurel Reservations" : "Warm regards,\nAurel Reservations",
+    ].join("\n\n"),
+
   day_before: (opts: { name: string; hotel: string; checkIn: string; channel: Channel }) =>
     [
       opts.channel === "whatsapp" ? `Hi ${opts.name},` : `Dear ${opts.name},`,
@@ -52,6 +60,12 @@ const MANIPULATION =
   /\b(ignore (all |your |the )?(previous |prior |above )?(instructions|rules|prompt)|you are now|act as|pretend (to be|you are)|system prompt|show (me )?your (prompt|instructions|rules)|reveal your|jailbreak|developer mode|disregard (your|the) (rules|instructions)|repeat (your|the) instructions)\b/i;
 
 const OTHER_GUEST = /\b(other guest|another guest|who (else )?is staying|guest list|room number of|is .{3,40} staying (at|with you))\b/i;
+
+// Does the text say anything about a stay at all? A follow-up like "What do you mean?"
+// does not, and must not be auto-answered from the thread.
+export function mentionsStay(text: string): boolean {
+  return STAY_WORDS.test(text);
+}
 
 export type TopicVerdict = { ok: true } | { ok: false; reason: "manipulation" | "off_topic" | "other_guest_data" };
 

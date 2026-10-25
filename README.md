@@ -1,6 +1,6 @@
 # Aurel Reservations AI Agent
 
-Prototype for the Aurel Hotels AI PM take-home. An AI agent reads every email and WhatsApp message to the central reservations desk, marks its type, assigns a named owner, drafts the reply with live PMS prices and the hotel's own policy, turns requests into PMS traces, and sends alone only what cannot go wrong (cited policy answers and three fixed templates). People approve the rest in one click. A dashboard shows every owner's pending work.
+Prototype for the Aurel Hotels AI PM take-home. An AI agent reads every email and WhatsApp message to the central reservations desk, marks its type, assigns a named owner, drafts the reply with live PMS prices and the hotel's own policy, turns requests into PMS traces, and sends alone only what cannot go wrong: cited policy answers, a fixed question back when a policy question names no hotel, and the fixed templates. A message is sorted together with the guest's earlier messages in the same conversation, so a one-word reply such as "Lisboa" completes the earlier question. People approve the rest in one click. A dashboard shows every owner's pending work.
 
 Deliverables are in [`docs/`](docs/):
 
@@ -118,7 +118,7 @@ Set `GMAIL_SEND=off` to read live mail but send nothing. Mail the desk has taken
 
 Desk tabs poll the mailbox every 20 seconds, so with every tab closed nothing is read. The scheduled check fills that gap for the types that may send alone. A GitHub Actions workflow ([.github/workflows/poll-mailbox.yml](.github/workflows/poll-mailbox.yml)) calls `GET /api/cron/poll` every five minutes with a bearer token. That route reads new mail and:
 
-- sends the cited policy answer, the group acknowledgement, the holding reply or the off-topic decline, then labels the message `Aurel/Auto-replied` and leaves it unread, so the next desk tab still receives it and shows the reply in the thread;
+- sends the cited policy answer, the question asking which hotel, the group acknowledgement, the holding reply or the off-topic decline, then labels the message `Aurel/Auto-replied` and leaves it unread, so the next desk tab still receives it and shows the reply in the thread;
 - labels everything that needs a person `Aurel/Waiting` and leaves it alone for the desk.
 
 Nothing is stored on the server; the Gmail labels are the whole state. Two costs to know about: a message the check has seen is sorted again when a desk tab takes it, so on the free Gemini tier every live email costs roughly double while the schedule is on; and GitHub runs schedules at best every five minutes, often a few minutes late. To switch it on:

@@ -11,8 +11,11 @@ export interface InboundMessage {
   receivedMinutesAgo: number;
   bookingRef?: string; // present when the channel carries it (OTA threads, reply-to-confirmation emails)
   // Set when the message came in through the live Gmail link; replies go back in the same thread.
-  // autoReplied: the scheduled check (/api/cron/poll) already answered this message.
-  gmail?: { id: string; threadId: string; messageId: string; references?: string; to?: string; autoReplied?: boolean };
+  // autoReplied: the scheduled check (/api/cron/poll) already answered this message. at: when Gmail received it.
+  gmail?: { id: string; threadId: string; messageId: string; references?: string; to?: string; autoReplied?: boolean; at?: string };
+  // Earlier messages from the same guest in this conversation, oldest first. A short
+  // reply ("Lisboa", "yes please") is read together with them.
+  priorMessages?: { body: string; at: string }[];
   serverAnalysis?: AnalysisResult;
   serverAutoSent?: {
     kind: string;

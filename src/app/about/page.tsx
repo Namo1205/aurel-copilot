@@ -5,7 +5,7 @@ const rows: { situation: string; does: string; never: string; handoff: string; a
     situation: "Policy question",
     does: "Searches that hotel's handbook by meaning, answers from the section it finds, and cites it.",
     never: "Answers from general knowledge or guesses the hotel. Early check-in is a special request, never a policy question.",
-    handoff: "No paragraph found, hotel unknown, or anything else in the message → an agent.",
+    handoff: "No paragraph found, or anything else in the message → an agent. No hotel named → asks which hotel, sent alone; the reply is read with the thread.",
     approval: "Sends alone when the whole message is policy-only",
   },
   {

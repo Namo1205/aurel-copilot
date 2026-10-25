@@ -170,6 +170,7 @@ export function toInbound(m: GmailMessage): InboundMessage {
     gmail: {
       id: m.id,
       threadId: m.threadId,
+      at: new Date(received).toISOString(),
       messageId: header(m.payload, "Message-ID"),
       references: header(m.payload, "References") || undefined,
       to: header(m.payload, "To") || undefined,
@@ -221,18 +222,47 @@ export interface OwnReply {
   at: string;
 }
 
-// Every reply the desk itself sent in a thread, oldest first, read back from Gmail.
-export async function ownRepliesInThread(threadId: string): Promise<OwnReply[]> {
+export interface ThreadHistory {
+  // What the desk itself sent, oldest first.
+  own: OwnReply[];
+  // What the guest wrote, oldest first, quoted history stripped.
+  guest: { body: string; at: string }[];
+}
+
+// One Gmail thread, split into the desk's replies and the guest's messages.
+export async function threadHistory(threadId: string): Promise<ThreadHistory> {
   const me = (await selfAddress()).toLowerCase();
   const t = await gmail<{ messages?: GmailMessage[] }>(`/threads/${threadId}?format=full`);
-  return (t.messages ?? [])
-    .filter((m) => header(m.payload, "From").toLowerCase().includes(me))
-    .map((m) => {
-      const plain = findPart(m.payload, "text/plain");
-      const raw = plain?.body?.data ? b64url(plain.body.data) : m.payload.body?.data ? b64url(m.payload.body.data) : "";
-      return { body: raw.trim(), at: new Date(Number(m.internalDate ?? Date.now())).toISOString() };
-    })
-    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const own: OwnReply[] = [];
+  const guest: { body: string; at: string }[] = [];
+  for (const m of t.messages ?? []) {
+    const from = header(m.payload, "From").toLowerCase();
+    const plain = findPart(m.payload, "text/plain");
+    const html = findPart(m.payload, "text/html");
+    const raw = plain?.body?.data ? b64url(plain.body.data) : html?.body?.data ? stripHtml(b64url(html.body.data)) : m.payload.body?.data ? b64url(m.payload.body.data) : "";
+    const at = new Date(Number(m.internalDate ?? Date.now())).toISOString();
+    if (from.includes(me)) own.push({ body: raw.trim(), at });
+    else if (!isSystemSender(from)) guest.push({ body: stripQuoted(raw).slice(0, 2000), at });
+  }
+  const byTime = (a: { at: string }, b: { at: string }) => Date.parse(a.at) - Date.parse(b.at);
+  return { own: own.sort(byTime), guest: guest.sort(byTime) };
+}
+
+// Every reply the desk itself sent in a thread, oldest first.
+export async function ownRepliesInThread(threadId: string): Promise<OwnReply[]> {
+  return (await threadHistory(threadId)).own;
+}
+
+// Attach the guest's earlier messages in the thread to a new message, so the sorter
+// reads a short reply together with the question it answers. Returns the history.
+export async function attachThreadContext(msg: InboundMessage): Promise<ThreadHistory | null> {
+  if (!msg.gmail?.threadId) return null;
+  const hist = await threadHistory(msg.gmail.threadId).catch(() => null);
+  if (!hist) return null;
+  const at = msg.gmail.at ? Date.parse(msg.gmail.at) : Date.now();
+  const prior = hist.guest.filter((g) => Date.parse(g.at) < at);
+  if (prior.length) msg.priorMessages = prior;
+  return hist;
 }
 
 // The desk's latest reply in a thread: what the scheduled check sent.

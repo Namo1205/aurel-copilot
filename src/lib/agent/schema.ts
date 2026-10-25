@@ -15,9 +15,11 @@ export const Category = z.enum([
 ]);
 
 // What, if anything, the AI agent may send without a person. Only cited
-// policy answers and the three fixed templates ever qualify (PRD section 4).
+// policy answers and the fixed templates ever qualify (PRD section 4).
+// ask_hotel: a policy question that names no hotel gets the fixed question back;
+// the guest's reply is read with the thread and answered from the handbook.
 export const AutoSend = z.object({
-  kind: z.enum(["none", "policy_answer", "holding_reply", "group_ack", "off_topic_decline"]),
+  kind: z.enum(["none", "policy_answer", "holding_reply", "group_ack", "off_topic_decline", "ask_hotel"]),
   reason: z.string(),
   // The fixed text that went out. When set, draftReply is the owner's follow-up, not the template.
   body: z.string().optional(),

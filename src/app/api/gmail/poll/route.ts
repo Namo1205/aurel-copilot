@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { gmailConfigured, gmailSendEnabled, ownReplyInThread, pullNewMessages, sendReply } from "@/lib/gmail";
+import { attachThreadContext, gmailConfigured, gmailSendEnabled, pullNewMessages, sendReply } from "@/lib/gmail";
 import { analyze } from "@/lib/agent";
 import { getSession, unauthorized } from "@/lib/auth";
 import type { AutoSend, Category } from "@/lib/agent/schema";
@@ -27,12 +27,14 @@ export async function GET() {
 
     for (const msg of messages) {
       try {
+        // Earlier guest messages in the thread travel with the new one into sorting.
+        const hist = await attachThreadContext(msg);
         const analysis = await analyze(msg);
         msg.serverAnalysis = analysis;
 
         if (msg.gmail?.autoReplied) {
           // The scheduled check already replied. Show what it sent; send nothing.
-          const prior = await ownReplyInThread(msg.gmail.threadId).catch(() => null);
+          const prior = hist?.own[hist.own.length - 1] ?? null;
           const p = analysis.proposal;
           if (p.autoSend.kind === "none") {
             p.autoSend = { kind: autoKindFor(p.triage.category), reason: "Sent by the scheduled check before a desk tab was open.", body: prior?.body };

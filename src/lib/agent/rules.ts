@@ -20,7 +20,7 @@ import {
 } from "@/lib/pms";
 import type { InboundMessage } from "@/lib/inbox/seed";
 import { AgentProposal, type AutoSend, type Category, type ProposedAction } from "./schema";
-import { TEMPLATES, topicCheck } from "./templates";
+import { TEMPLATES, mentionsStay, topicCheck } from "./templates";
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
@@ -185,8 +185,7 @@ function detect(text: string): Intents {
   };
 }
 
-function resolveBooking(msg: InboundMessage, hotel: Hotel | undefined, now: Date): { booking?: Booking; confidence: "none" | "low" | "high"; note: string } {
-  const text = `${msg.subject ?? ""} ${msg.body}`;
+function resolveBooking(msg: InboundMessage, hotel: Hotel | undefined, now: Date, text: string): { booking?: Booking; confidence: "none" | "low" | "high"; note: string } {
   const ref = msg.bookingRef ?? text.match(/\bAUR-\d{5}\b/i)?.[0];
   if (ref) {
     const b = getBooking(ref);
@@ -237,13 +236,26 @@ function pickQuotes(quotes: RateQuote[], roomType?: string): RateQuote[] {
   return first.filter((q) => q.ratePlan === "FLEX" || q.ratePlan === "ADV");
 }
 
+// Does the message ask for anything on its own? "repeat" alone is not an ask.
+function hasIntent(it: Intents): boolean {
+  return Object.entries(it).some(([k, v]) => k !== "repeat" && !!v);
+}
+
 export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): AgentProposal {
-  const rawText = `${msg.subject ?? ""}\n${msg.body}`;
+  const current = `${msg.subject ?? ""}\n${msg.body}`;
+  const prior = (msg.priorMessages ?? []).map((p) => p.body).join("\n");
+  // A short follow-up ("Lisboa", "the first option") carries no ask of its own: read it with the thread.
+  const usesThread = !!prior && !hasIntent(detect(current));
+  // A follow-up that is itself a question but says nothing about a stay ("What do you
+  // mean?") is drafted from the thread but never sent alone: a person answers.
+  const vague = usesThread && /\?/.test(current) && !mentionsStay(current);
+  const rawText = usesThread ? `${prior}\n${current}` : current;
   const it = detect(rawText);
   const text = redactCards(rawText);
 
-  let hotel = findHotelByText(text);
-  const bm = resolveBooking(msg, hotel, now);
+  // The hotel may have been named earlier in the conversation.
+  let hotel = findHotelByText(text) ?? (prior ? findHotelByText(redactCards(prior)) : undefined);
+  const bm = resolveBooking(msg, hotel, now, `${text} ${prior ? redactCards(prior) : ""}`);
   const booking = bm.booking;
   if (booking) hotel = getHotel(booking.hotelId);
   const guest = booking ? getGuest(booking.guestId) : undefined;
@@ -256,8 +268,8 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
   const secondary = new Set<Category>();
   const sensitiveTypes: AgentProposal["sensitiveData"]["types"] = [];
   let urgency: "low" | "normal" | "high" = "normal";
-  let confidence = 0.8;
-  let handoffReason = "";
+  let confidence = vague ? 0.6 : 0.8;
+  let handoffReason = vague ? "Follow-up question the thread does not answer by itself; a person replies." : "";
   let draftOverride: string | null = null;
   let autoSend: AutoSend = { kind: "none", reason: "" };
   const cite = (p: Policy[]) => p.forEach((x) => citations.add(x.id));
@@ -732,6 +744,16 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
     }
     paras.push(`Thank you for your message. Here is what you need for ${hotel.name}:`, bits.map((b) => `• ${b}`).join("\n"), it.parking || it.pets ? "If you let me know your booking reference I can add this to the reservation so the team are expecting you." : "If there is anything else about your stay, just reply here.");
   } else if (!hotel && (it.parking || it.pets || it.faqOther)) {
+    const policyOnly =
+      !booking && !it.card && !it.group && !it.cancel && !it.modify && !it.enquiry && !it.priceMatch && !it.cot && !it.occasion && !it.transfer && !it.earlyCheckIn && !it.lateCheckOut && !it.spa && !it.dining && !it.allergy && !it.medical && !it.accessibility && !it.vip;
+    if (policyOnly && !vague) {
+      // Nothing to look up yet and nothing to arrange: the fixed question goes alone, and the
+      // guest's reply is read with this message so the answer can follow without a person.
+      draftOverride = TEMPLATES.ask_hotel({ name: senderFirst, channel: msg.channel });
+      autoSend = { kind: "ask_hotel", reason: "Policy question with no hotel named: fixed question sent alone; the reply is read with the thread.", body: draftOverride };
+      didNotPromise.push("Did not guess the hotel; hours, parking and pet rules differ between the nine hotels.");
+      return finish("pre_arrival_question", "normal");
+    }
     paras.push("Happy to help. Which Aurel hotel are you staying at? Parking and pet arrangements differ by property and I want to give you the exact answer.");
     confidence = 0.6;
   }
@@ -769,7 +791,7 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
     const sensitive = sensitiveTypes.length > 0;
     const onlyFaq = cat === "pre_arrival_question" && !sensitive && !handoff && actions.length === 0;
     const body = draftOverride ?? [greeting(msg, guest?.name), ...paras, signoff(msg, hotel)].join("\n\n");
-    const policyAuto = onlyFaq && confidence >= 0.8 && !!hotel && citations.size > 0 && autoSend.kind === "none";
+    const policyAuto = onlyFaq && !vague && confidence >= 0.8 && !!hotel && citations.size > 0 && autoSend.kind === "none";
     const proposal: AgentProposal = {
       triage: {
         category: cat,

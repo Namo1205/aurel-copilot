@@ -118,7 +118,7 @@ export function queueFor(p: AgentProposal): Queue {
   // Only a cited policy answer closes the item. Templates (holding reply,
   // group acknowledgement, off-topic decline) are sent at once, but the item
   // still goes to a person for the decision or for awareness.
-  if (p.autoSend.kind === "policy_answer") return "auto";
+  if (p.autoSend.kind === "policy_answer" || p.autoSend.kind === "ask_hotel") return "auto";
   if (p.triage.category === "group_event") return "sales";
   const handoff = p.actions.find((a) => a.type === "handoff");
   if (handoff && handoff.type === "handoff" && handoff.to === "reservations_manager") return "manager";

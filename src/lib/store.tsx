@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { SEED_MESSAGES, type InboundMessage } from "@/lib/inbox/seed";
 import type { AnalysisResult } from "@/lib/agent";
 import type { ExecutionResult, Handoff } from "@/lib/agent/execute";
-import { CATEGORY_LABEL, type Category } from "@/lib/agent/schema";
+import { CATEGORY_LABEL, type AutoSend, type Category } from "@/lib/agent/schema";
 import type { Booking, Trace } from "@/lib/pms";
 import { BOOKINGS, createTrace, getBooking, getGuest, getHotel } from "@/lib/pms";
 import { TEMPLATES } from "@/lib/agent/templates";
@@ -194,6 +194,23 @@ export function effectiveCategory(item: InboxItem): Category | undefined {
   return item.typeOverride ?? item.analysis?.proposal.triage.category;
 }
 
+// Which auto-sent kinds close the item with the AI agent as owner. The other templates
+// (holding reply, group acknowledgement, decline) go out at once but a person still decides.
+function closesItem(kind: AutoSend["kind"]): boolean {
+  return kind === "policy_answer" || kind === "ask_hotel";
+}
+
+// The message with the earlier guest messages of its conversation attached, for sorting.
+export function withThreadContext(state: Pick<State, "items" | "order">, item: InboxItem): InboundMessage {
+  const key = convKey(item.message);
+  const prior = state.order
+    .map((id) => state.items[id])
+    .filter((i) => i.message.id !== item.message.id && convKey(i.message) === key && Date.parse(i.receivedAt) < Date.parse(item.receivedAt))
+    .sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt))
+    .map((i) => ({ body: i.message.body, at: i.receivedAt }));
+  return prior.length ? { ...item.message, priorMessages: prior } : item.message;
+}
+
 function isVipOrAdvisor(item: InboxItem, bookingId: string | null): boolean {
   const text = `${item.message.subject ?? ""} ${item.message.body} ${item.message.fromName}`;
   if (/\b(vip|travel advisor|luxury programme|luxury program|virtuoso|advisor)\b/i.test(text)) return true;
@@ -374,7 +391,7 @@ export function reducer(state: State, action: Action): State {
         });
         const nowIso = action.message.serverAutoSent?.at ?? new Date().toISOString();
         const auto = p.autoSend.kind !== "none";
-        const closed = p.autoSend.kind === "policy_answer";
+        const closed = closesItem(p.autoSend.kind);
         const item: InboxItem = {
           message: action.message,
           receivedAt,
@@ -383,7 +400,7 @@ export function reducer(state: State, action: Action): State {
           draft: p.draftReply,
           approved: p.actions.map(() => true),
           ownerId: closed ? AI_OWNER_ID : assign.ownerId,
-          ownerRule: closed ? "Policy-only message answered from cited policy; the AI agent owns it." : assign.rule,
+          ownerRule: closed ? "Answered alone by the AI agent; it owns the item." : assign.rule,
           ownerHistory: [{ from: null, to: closed ? AI_OWNER_ID : assign.ownerId, at: nowIso, reason: closed ? "Sent alone" : assign.rule }],
           queue,
           important,
@@ -488,14 +505,14 @@ export function reducer(state: State, action: Action): State {
       });
       const nowIso = new Date().toISOString();
       const auto = p.autoSend.kind !== "none";
-      const closed = p.autoSend.kind === "policy_answer";
+      const closed = closesItem(p.autoSend.kind);
       const next = patch(state, action.id, {
         status: closed ? "auto_sent" : "drafted",
         analysis: action.analysis,
         draft: p.draftReply,
         approved: p.actions.map(() => true),
         ownerId: closed ? AI_OWNER_ID : assign.ownerId,
-        ownerRule: closed ? "Policy-only message answered from cited policy; the AI agent owns it." : assign.rule,
+        ownerRule: closed ? "Answered alone by the AI agent; it owns the item." : assign.rule,
         ownerHistory: [{ from: null, to: closed ? AI_OWNER_ID : assign.ownerId, at: nowIso, reason: closed ? "Sent alone" : assign.rule }],
         queue,
         important,
@@ -781,7 +798,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const item = state.items[nextId];
     dispatch({ type: "analyzing", id: nextId });
     // Sample messages are sorted by the rules engine so the model quota is kept for real mail.
-    fetch("/api/analyze", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: item.message, engine: isSample(nextId) ? "rules" : undefined }) })
+    fetch("/api/analyze", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: withThreadContext({ items: state.items, order: state.order }, item), engine: isSample(nextId) ? "rules" : undefined }) })
       .then(async (r) => {
         if (r.status === 401) {
           dispatch({ type: "logout" });

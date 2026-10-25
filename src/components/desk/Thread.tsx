@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useStore, type InboxItem } from "@/lib/store";
+import { useStore, withThreadContext, type InboxItem } from "@/lib/store";
 import { Button, CHANNEL_LABEL, ChannelIcon, timeAgo } from "@/components/ui";
 import { CATEGORY_LABEL, type Category } from "@/lib/agent/schema";
 import { getHotel } from "@/lib/pms";
@@ -21,6 +21,7 @@ const AUTO_SEND_LABEL: Record<string, string> = {
   holding_reply: "holding reply, sent alone",
   group_ack: "group acknowledgement, sent alone",
   off_topic_decline: "decline, sent alone",
+  ask_hotel: "asked which hotel, sent alone",
 };
 
 function Bubble({ side, who, when, children, tone = "plain" }: { side: "guest" | "us"; who: string; when: string; children: React.ReactNode; tone?: "plain" | "ai" | "failed" }) {
@@ -195,7 +196,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
   const rerun = async () => {
     dispatch({ type: "analyzing", id });
     try {
-      const r = await fetch("/api/analyze", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: m }) });
+      const r = await fetch("/api/analyze", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: withThreadContext(state, head) }) });
       if (!r.ok) throw new Error(`Sorting failed (${r.status})`);
       dispatch({ type: "analyzed", id, analysis: (await r.json()) as AnalysisResult });
     } catch (e) {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { LABELS, addLabels, gmailConfigured, gmailSendEnabled, listNewMessages, sendReply } from "@/lib/gmail";
+import { LABELS, addLabels, attachThreadContext, gmailConfigured, gmailSendEnabled, listNewMessages, sendReply } from "@/lib/gmail";
 import { analyze } from "@/lib/agent";
 import { checkCronSecret, cronConfigured } from "@/lib/auth";
 
@@ -29,6 +29,7 @@ export async function GET(req: Request) {
     for (const msg of messages) {
       const id = msg.gmail!.id;
       try {
+        await attachThreadContext(msg);
         const a = await analyze(msg);
         const auto = a.proposal.autoSend;
         const body = auto.kind !== "none" ? auto.body || a.proposal.draftReply : "";
