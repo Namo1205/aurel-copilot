@@ -16,6 +16,9 @@ export interface InboundMessage {
   // Earlier messages from the same guest in this conversation, oldest first. A short
   // reply ("Lisboa", "yes please") is read together with them.
   priorMessages?: { body: string; at: string }[];
+  // Loaded from the mailbox long after it arrived (more than a day). Sorted and owned
+  // like any message, but nothing is sent alone: a person decides.
+  imported?: boolean;
   serverAnalysis?: AnalysisResult;
   serverAutoSent?: {
     kind: string;

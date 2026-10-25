@@ -9,7 +9,6 @@ import { ContextPanel } from "@/components/desk/ContextPanel";
 import { Compose } from "@/components/desk/Compose";
 import { conversationKey, conversationsFor, viewsFor, type View, type ViewId } from "@/lib/desk/visibility";
 import { ROSTER, isOnShift } from "@/lib/desk/roster";
-import { restoreFromMailbox } from "@/lib/desk/restore";
 
 export default function Desk() {
   return (
@@ -36,7 +35,6 @@ function DeskInner() {
   }, [wantSamples, state.hydrated, state.samples, dispatch]);
   const [composing, setComposing] = useState(false);
   const [viewId, setViewId] = useState<ViewId | null>(null);
-  const [reloadNote, setReloadNote] = useState<string | null>(null);
 
   // "New since you last looked": the store records when this person left the list
   // (another page, background tab) and turns that into the divider when they return.
@@ -79,9 +77,14 @@ function DeskInner() {
         }))
       : [];
 
+  const sync = state.mailboxSync;
   const emptyText =
-    all.length === 0 && state.gmail?.configured
-      ? `No conversations yet. New mail to ${state.gmail.address} appears here within 20 seconds, sorted and owned.`
+    all.length === 0 && state.gmail?.configured && sync.status === "running"
+      ? `Loading the mailbox… ${sync.loaded}${sync.estimate ? ` of about ${sync.estimate}` : ""} so far.`
+      : all.length === 0 && state.gmail?.configured && sync.status === "error"
+        ? `The mailbox could not be loaded: ${sync.error ?? "unknown error"}. New mail still appears here within 20 seconds.`
+        : all.length === 0 && state.gmail?.configured
+          ? `No conversations yet. New mail to ${state.gmail.address} appears here within 20 seconds, sorted and owned.`
       : view.id === "done"
         ? "Nothing closed yet."
         : session.role === "agent"
@@ -149,26 +152,6 @@ function DeskInner() {
         <div className="flex-1 grid place-items-center p-8 text-sm text-stone-500 text-center max-w-none">
           <div className="max-w-sm leading-relaxed">
             {emptyText}
-            {state.gmail?.configured && all.length === 0 ? (
-              <div className="mt-3">
-                <button
-                  onClick={() => {
-                    setReloadNote("Reading the mailbox…");
-                    restoreFromMailbox(dispatch)
-                      .then((r) => {
-                        setReloadNote(`${r.closed} answered restored, ${r.reopened} reopened.`);
-                        // Closed conversations live in Done; open the view that has them.
-                        if (r.closed || r.reopened) setViewId(views.some((v) => v.id === "done") && r.closed ? "done" : views[0].id);
-                      })
-                      .catch((e) => setReloadNote(e instanceof Error ? e.message : String(e)));
-                  }}
-                  className="text-brand underline"
-                >
-                  Reload the last three days from the mailbox
-                </button>
-                {reloadNote ? <div className="mt-1 text-xs text-stone-500">{reloadNote}</div> : null}
-              </div>
-            ) : null}
             {session.role === "manager" || session.role === "senior" ? (
               <div className="mt-3">
                 <button onClick={() => setComposing(true)} className="text-brand underline">

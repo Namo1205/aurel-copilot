@@ -12,6 +12,7 @@ import { CATEGORY_LABEL, type AutoSend, type Category } from "@/lib/agent/schema
 import type { Booking, Trace } from "@/lib/pms";
 import { BOOKINGS, createTrace, getBooking, getGuest, getHotel } from "@/lib/pms";
 import { TEMPLATES } from "@/lib/agent/templates";
+import { importItems, syncMailbox, type SyncItem } from "@/lib/desk/sync";
 import { AI_OWNER_ID, MAILBOX_OWNER_ID, ROSTER, assignOwner, importantReasons, isOnShift, queueFor, shiftEnded, staffById, type Queue, type Role, type ShiftOverrides } from "@/lib/desk/roster";
 
 export type ItemStatus = "new" | "analyzing" | "drafted" | "sent" | "handed_off" | "auto_sent";
@@ -111,6 +112,8 @@ export interface State {
   // Per person: the "new since you last looked" line. awayAt is set when they leave the
   // list (other page, background tab); it becomes newSince when they come back.
   listSeen: Record<string, { newSince: string | null; awayAt: string | null }>;
+  // The automatic load of the whole mailbox into this browser.
+  mailboxSync: { status: "idle" | "running" | "done" | "error"; loaded: number; estimate: number; at: string | null; error?: string };
 }
 
 export type Action =
@@ -144,13 +147,14 @@ export type Action =
   | { type: "manual_reply"; id: string; body: string; by: string; delivery?: { via: "gmail"; at: string; error?: string } }
   | { type: "shift_tick"; now: string }
   | { type: "notifications_seen"; staffId: string }
+  | { type: "mailbox_sync"; sync: Partial<State["mailboxSync"]> }
   | { type: "list_opened"; staffId: string }
   | { type: "list_left"; staffId: string; at: string }
   | { type: "reset" };
 
 const KEY = "aurel-desk-state-v2";
 
-const EMPTY: State = { items: {}, order: [], traces: [], handoffs: [], bookingUpdates: [], selectedId: null, hydrated: false, rotation: 0, session: null, gmail: null, samples: "none", shiftOverrides: {}, handovers: [], events: [], notificationsSeenAt: {}, listSeen: {} };
+const EMPTY: State = { items: {}, order: [], traces: [], handoffs: [], bookingUpdates: [], selectedId: null, hydrated: false, rotation: 0, session: null, gmail: null, samples: "none", shiftOverrides: {}, handovers: [], events: [], notificationsSeenAt: {}, listSeen: {}, mailboxSync: { status: "idle", loaded: 0, estimate: 0, at: null } };
 export const EMPTY_STATE: State = { ...EMPTY, hydrated: true };
 
 // The desk starts empty. Sample messages are loaded only in demo mode (no mailbox
@@ -489,7 +493,11 @@ export function reducer(state: State, action: Action): State {
       return patch(state, action.id, { status: "analyzing", error: undefined });
     case "analyzed": {
       const item = state.items[action.id];
-      const p = action.analysis.proposal;
+      // Loaded from the mailbox long after it arrived: sorted and owned, but a person decides.
+      const analysis: AnalysisResult = item.message.imported
+        ? { ...action.analysis, proposal: { ...action.analysis.proposal, autoSendEligible: false, autoSend: { kind: "none", reason: "Arrived before this desk was connected; a person decides." } } }
+        : action.analysis;
+      const p = analysis.proposal;
       const bookingId = p.bookingMatch.bookingId;
       const vip = isVipOrAdvisor(item, bookingId);
       const assign = assignOwner({ proposal: p, pendingByOwner: pendingByOwner(state), rotation: state.rotation, isVipOrAdvisor: vip, now: new Date(), overrides: state.shiftOverrides });
@@ -508,11 +516,11 @@ export function reducer(state: State, action: Action): State {
       const closed = closesItem(p.autoSend.kind);
       const next = patch(state, action.id, {
         status: closed ? "auto_sent" : "drafted",
-        analysis: action.analysis,
+        analysis,
         draft: p.draftReply,
         approved: p.actions.map(() => true),
         ownerId: closed ? AI_OWNER_ID : assign.ownerId,
-        ownerRule: closed ? "Answered alone by Aurel Assistant; it owns the item." : assign.rule,
+        ownerRule: closed ? "Answered alone by Aurel Assistant; it owns the item." : item.message.imported ? `Arrived before this desk was connected; a person decides. ${assign.rule}` : assign.rule,
         ownerHistory: [{ from: null, to: closed ? AI_OWNER_ID : assign.ownerId, at: nowIso, reason: closed ? "Sent alone" : assign.rule }],
         queue,
         important,
@@ -657,6 +665,8 @@ export function reducer(state: State, action: Action): State {
     }
     case "notifications_seen":
       return { ...state, notificationsSeenAt: { ...state.notificationsSeenAt, [action.staffId]: new Date().toISOString() } };
+    case "mailbox_sync":
+      return { ...state, mailboxSync: { ...state.mailboxSync, ...action.sync } };
     case "list_opened": {
       const cur = state.listSeen[action.staffId];
       // An immediate re-open (React strict mode remounts in development) is not a return.
@@ -758,6 +768,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (raw) {
         const saved = JSON.parse(raw) as Partial<State>;
         if (saved.items) for (const it of Object.values(saved.items)) if (it.status === "analyzing") it.status = "new";
+        if (saved.mailboxSync?.status === "running") saved.mailboxSync = { ...saved.mailboxSync, status: "idle" };
         dispatch({ type: "hydrate", state: { ...saved, gmail: null } });
       } else {
         dispatch({ type: "hydrate", state: {} });
@@ -822,21 +833,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [state.hydrated]);
 
-  // Live Gmail: pull new mail every 20 seconds while a signed-in tab is open.
+  // Live Gmail: pull new mail every 20 seconds while a signed-in tab is open. Once the
+  // mailbox is loaded, also pick up what the scheduled check or another browser took.
+  const latestKnown =
+    state.mailboxSync.status === "done"
+      ? (state.order.reduce<string | null>((m, id) => {
+          const it = state.items[id];
+          return it.message.gmail && (!m || Date.parse(it.receivedAt) > Date.parse(m)) ? it.receivedAt : m;
+        }, null) ?? state.mailboxSync.at)
+      : null;
+  const latestGmailAt = useRef<string | null>(null);
+  useEffect(() => {
+    latestGmailAt.current = latestKnown;
+  }, [latestKnown]);
   useEffect(() => {
     if (!state.hydrated || !state.session) return;
     let stop = false;
     const tick = async () => {
       try {
-        const r = await fetch("/api/gmail/poll");
+        const since = latestGmailAt.current;
+        const r = await fetch(since ? `/api/gmail/poll?since=${encodeURIComponent(since)}` : "/api/gmail/poll");
         if (r.status === 401) {
           dispatch({ type: "logout" });
           return;
         }
         if (!r.ok) return;
-        const { messages } = (await r.json()) as { messages: InboundMessage[] };
+        const { messages, taken } = (await r.json()) as { messages: InboundMessage[]; taken?: SyncItem[] };
         if (stop) return;
         for (const m of messages) dispatch({ type: "add_message", message: m });
+        if (taken?.length) importItems(dispatch, taken);
       } catch {
         // Offline or not configured: try again next tick.
       }
@@ -848,6 +873,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearInterval(t);
     };
   }, [state.hydrated, state.session]);
+
+  // Live Gmail: load the whole mailbox into this browser, once, when a signed-in desk opens
+  // with a mailbox connected; again if the last load is older than 12 hours.
+  const syncStarted = useRef(false);
+  useEffect(() => {
+    if (!state.hydrated || !state.session || !state.gmail?.configured || syncStarted.current) return;
+    const s = state.mailboxSync;
+    const fresh = s.status === "done" && !!s.at && Date.now() - Date.parse(s.at) < 12 * 3600000;
+    syncStarted.current = true;
+    if (fresh) return;
+    dispatch({ type: "mailbox_sync", sync: { status: "running", loaded: 0, estimate: 0, error: undefined } });
+    syncMailbox(dispatch, (loaded, estimate) => dispatch({ type: "mailbox_sync", sync: { loaded, estimate } }))
+      .then(() => dispatch({ type: "mailbox_sync", sync: { status: "done", at: new Date().toISOString() } }))
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        dispatch({ type: "mailbox_sync", sync: { status: "error", error: msg } });
+        if (msg.startsWith("401")) dispatch({ type: "logout" });
+      });
+  }, [state.hydrated, state.session, state.gmail, state.mailboxSync, dispatch]);
 
   // Live Gmail: what the AI agent sends alone really goes out, once, to the sender.
   const sending = useRef(new Set<string>());

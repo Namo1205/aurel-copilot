@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { attachThreadContext, gmailConfigured, gmailSendEnabled, pullNewMessages, sendReply } from "@/lib/gmail";
+import { attachThreadContext, gmailConfigured, gmailSendEnabled, pullNewMessages, recentlyTaken, sendReply, type SyncItem } from "@/lib/gmail";
 import { analyze } from "@/lib/agent";
 import { getSession, unauthorized } from "@/lib/auth";
 import type { AutoSend, Category } from "@/lib/agent/schema";
@@ -19,11 +19,19 @@ export const maxDuration = 60;
 // Polls new mail and triages it server-side. Anything the AI agent may send alone
 // (cited policy answer, holding reply, group acknowledgement, decline) goes out here,
 // before the message reaches a desk. Called every 20 seconds by each open desk tab.
-export async function GET() {
+export async function GET(req: Request) {
   if (!(await getSession())) return unauthorized();
-  if (!gmailConfigured()) return NextResponse.json({ messages: [] });
+  if (!gmailConfigured()) return NextResponse.json({ messages: [], taken: [] });
+  // since: the newest message this desk already has. Anything taken after it by the
+  // scheduled check or another browser is returned too, with its reply.
+  const since = new URL(req.url).searchParams.get("since");
   try {
     const messages = await pullNewMessages();
+    let taken: SyncItem[] = [];
+    if (since) {
+      const have = new Set(messages.map((m) => m.id));
+      taken = (await recentlyTaken(since).catch(() => [])).filter((t) => !have.has(t.message.id));
+    }
 
     for (const msg of messages) {
       try {
@@ -75,8 +83,8 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ messages });
+    return NextResponse.json({ messages, taken });
   } catch (e) {
-    return NextResponse.json({ messages: [], error: e instanceof Error ? e.message : String(e) }, { status: 502 });
+    return NextResponse.json({ messages: [], taken: [], error: e instanceof Error ? e.message : String(e) }, { status: 502 });
   }
 }

@@ -229,23 +229,98 @@ export interface ThreadHistory {
   guest: { body: string; at: string }[];
 }
 
-// One Gmail thread, split into the desk's replies and the guest's messages.
-export async function threadHistory(threadId: string): Promise<ThreadHistory> {
-  const me = (await selfAddress()).toLowerCase();
-  const t = await gmail<{ messages?: GmailMessage[] }>(`/threads/${threadId}?format=full`);
+function messageAt(m: GmailMessage): string {
+  return new Date(Number(m.internalDate ?? Date.now())).toISOString();
+}
+
+// Split one thread's messages into the desk's replies and the guest's messages.
+function splitThread(messages: GmailMessage[], me: string): ThreadHistory {
   const own: OwnReply[] = [];
   const guest: { body: string; at: string }[] = [];
-  for (const m of t.messages ?? []) {
+  for (const m of messages) {
     const from = header(m.payload, "From").toLowerCase();
     const plain = findPart(m.payload, "text/plain");
     const html = findPart(m.payload, "text/html");
     const raw = plain?.body?.data ? b64url(plain.body.data) : html?.body?.data ? stripHtml(b64url(html.body.data)) : m.payload.body?.data ? b64url(m.payload.body.data) : "";
-    const at = new Date(Number(m.internalDate ?? Date.now())).toISOString();
+    const at = messageAt(m);
     if (from.includes(me)) own.push({ body: raw.trim(), at });
     else if (!isSystemSender(from)) guest.push({ body: stripQuoted(raw).slice(0, 2000), at });
   }
   const byTime = (a: { at: string }, b: { at: string }) => Date.parse(a.at) - Date.parse(b.at);
   return { own: own.sort(byTime), guest: guest.sort(byTime) };
+}
+
+// One Gmail thread, split into the desk's replies and the guest's messages.
+export async function threadHistory(threadId: string): Promise<ThreadHistory> {
+  const me = (await selfAddress()).toLowerCase();
+  const t = await gmail<{ messages?: GmailMessage[] }>(`/threads/${threadId}?format=full`);
+  return splitThread(t.messages ?? [], me);
+}
+
+// One guest message as the sync hands it to a desk: with the reply the desk sent to it,
+// if any, and whether a desk has already taken it.
+export interface SyncItem {
+  message: InboundMessage;
+  receivedAt: string;
+  reply: OwnReply | null;
+  taken: boolean;
+}
+
+function itemsFromThread(messages: GmailMessage[], me: string, deskLabel: string, autoRepliedLabel: string): SyncItem[] {
+  const { own } = splitThread(messages, me);
+  const out: SyncItem[] = [];
+  for (const m of messages) {
+    const from = header(m.payload, "From").toLowerCase();
+    if (from.includes(me) || isSystemSender(from)) continue;
+    const message = toInbound(m);
+    const labels = m.labelIds ?? [];
+    message.gmail!.autoReplied = labels.includes(autoRepliedLabel);
+    const receivedAt = messageAt(m);
+    // The first reply the desk sent after this message is the one that answered it.
+    const reply = own.find((r) => Date.parse(r.at) > Date.parse(receivedAt)) ?? null;
+    out.push({ message, receivedAt, reply, taken: labels.includes(deskLabel) });
+  }
+  return out;
+}
+
+// One page of the whole mailbox, oldest guest messages with their replies, for the
+// automatic load when a desk opens. Pages through every thread, any age.
+export async function listThreadsPage(pageToken?: string | null, max = 15): Promise<{ items: SyncItem[]; nextPageToken: string | null; estimate: number }> {
+  const q = "-in:spam -in:trash -in:drafts -in:chats";
+  const list = await gmail<{ threads?: { id: string }[]; nextPageToken?: string; resultSizeEstimate?: number }>(
+    `/threads?q=${encodeURIComponent(q)}&maxResults=${max}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`,
+  );
+  const [me, desk, autoReplied] = await Promise.all([selfAddress(), labelId(LABELS.desk), labelId(LABELS.autoReplied)]);
+  const items: SyncItem[] = [];
+  for (const t of list.threads ?? []) {
+    const full = await gmail<{ messages?: GmailMessage[] }>(`/threads/${t.id}?format=full`);
+    items.push(...itemsFromThread(full.messages ?? [], me.toLowerCase(), desk, autoReplied));
+  }
+  items.sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt));
+  return { items, nextPageToken: list.nextPageToken ?? null, estimate: list.resultSizeEstimate ?? 0 };
+}
+
+// Messages some desk took since `sinceIso`: the scheduled check's auto-replies, or mail
+// another browser took. Lets every open desk show them within one poll.
+export async function recentlyTaken(sinceIso: string, max = 20): Promise<SyncItem[]> {
+  const after = Math.floor(Date.parse(sinceIso) / 1000);
+  if (!Number.isFinite(after)) return [];
+  const q = `label:${LABELS.desk} after:${after}`;
+  const list = await gmail<{ messages?: { id: string; threadId: string }[] }>(`/messages?q=${encodeURIComponent(q)}&maxResults=${max}`);
+  const ids = list.messages ?? [];
+  if (!ids.length) return [];
+  const [me, desk, autoReplied] = await Promise.all([selfAddress(), labelId(LABELS.desk), labelId(LABELS.autoReplied)]);
+  const threads = new Map<string, Promise<GmailMessage[]>>();
+  const wanted = new Set(ids.map((m) => m.id));
+  const out: SyncItem[] = [];
+  for (const { threadId } of ids) {
+    if (!threads.has(threadId)) threads.set(threadId, gmail<{ messages?: GmailMessage[] }>(`/threads/${threadId}?format=full`).then((t) => t.messages ?? []));
+  }
+  for (const [, p] of threads) {
+    const messages = await p;
+    for (const item of itemsFromThread(messages, me.toLowerCase(), desk, autoReplied)) if (wanted.has(item.message.gmail!.id)) out.push(item);
+  }
+  return out.sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt));
 }
 
 // Every reply the desk itself sent in a thread, oldest first.
@@ -271,32 +346,6 @@ export async function ownReplyInThread(threadId: string): Promise<OwnReply | nul
   return all[all.length - 1] ?? null;
 }
 
-// Everything the desk has taken from the mailbox in the last `days` days, each with
-// the desk's reply to it where there is one. A fresh or cleared browser rebuilds the
-// desk from this, so clearing local state never loses a guest's message.
-export async function listTakenMessages(days = 3, max = 50): Promise<{ message: InboundMessage; receivedAt: string; reply: OwnReply | null }[]> {
-  const q = `label:${LABELS.desk} newer_than:${days}d`;
-  const list = await gmail<{ messages?: { id: string; threadId: string }[] }>(`/messages?q=${encodeURIComponent(q)}&maxResults=${max}`);
-  const ids = list.messages ?? [];
-  if (!ids.length) return [];
-  const [autoReplied, me] = await Promise.all([labelId(LABELS.autoReplied), selfAddress()]);
-  const repliesByThread = new Map<string, Promise<OwnReply[]>>();
-  const out: { message: InboundMessage; receivedAt: string; reply: OwnReply | null }[] = [];
-  for (const { id, threadId } of ids) {
-    const full = await gmail<GmailMessage>(`/messages/${id}?format=full`);
-    const fromHeader = header(full.payload, "From").toLowerCase();
-    if (fromHeader.includes(me.toLowerCase()) || isSystemSender(fromHeader)) continue;
-    const message = toInbound(full);
-    message.gmail!.autoReplied = (full.labelIds ?? []).includes(autoReplied);
-    const receivedAt = new Date(Number(full.internalDate ?? Date.now())).toISOString();
-    if (!repliesByThread.has(threadId)) repliesByThread.set(threadId, ownRepliesInThread(threadId).catch(() => []));
-    const replies = await repliesByThread.get(threadId)!;
-    // The first reply sent after this message is the one that answered it.
-    const reply = replies.find((r) => Date.parse(r.at) > Date.parse(receivedAt)) ?? null;
-    out.push({ message, receivedAt, reply });
-  }
-  return out.sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt));
-}
 
 const SYSTEM_SENDER = /no-?reply|do-?not-?reply|mailer-daemon|postmaster|@google\.com|@accounts\.google|notification|newsletter/i;
 export function isSystemSender(from: string): boolean {

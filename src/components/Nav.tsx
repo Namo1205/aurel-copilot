@@ -80,6 +80,17 @@ export function Nav() {
               {gmail.address ? `Live mail: ${gmail.address}${gmail.send ? "" : " (read only)"}` : "Mailbox not reachable"}
             </span>
           ) : null}
+          {state.mailboxSync.status === "running" ? (
+            <span className="flex items-center gap-1.5 text-xs text-stone-500" title="Loading every conversation in the mailbox into this browser. Answered ones come back closed with their reply; unanswered ones are sorted and owned.">
+              <span className="h-3 w-3 rounded-full border-2 border-stone-300 border-t-brand animate-spin" />
+              Loading mailbox{state.mailboxSync.loaded ? ` · ${state.mailboxSync.loaded}${state.mailboxSync.estimate ? ` of about ${state.mailboxSync.estimate}` : ""}` : "…"}
+            </span>
+          ) : state.mailboxSync.status === "error" ? (
+            <span className="flex items-center gap-1.5 text-xs text-rose-700" title={state.mailboxSync.error}>
+              <span className="h-2 w-2 rounded-full bg-rose-500" />
+              Mailbox could not be loaded
+            </span>
+          ) : null}
           {health ? (
             <span className="flex items-center gap-1.5 text-xs text-stone-500" title={assistantTip}>
               <span className={`h-2 w-2 rounded-full ${assistantTone === "green" ? "bg-emerald-500" : "bg-amber-400"}`} />
