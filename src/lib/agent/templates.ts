@@ -81,6 +81,13 @@ export function topicCheck(text: string): TopicVerdict {
   return { ok: true };
 }
 
+// Placeholders a draft still carries, such as "[confirm rate]" or "[Guest Name]". Sending
+// is blocked until they are filled in. The one placeholder the system fills itself is ignored.
+export const PAYMENT_LINK_PLACEHOLDER = "[Secure payment link will be inserted on send]";
+export function draftGaps(text: string): string[] {
+  return [...new Set((text.match(/\[[^\]\n]{2,60}\]/g) ?? []).filter((g) => g !== PAYMENT_LINK_PLACEHOLDER))];
+}
+
 // Outbound check: may this draft leave the building? Catches code blocks,
 // prompt leakage and anything that does not read like a reservations reply.
 export function outboundCheck(draft: string): TopicVerdict {

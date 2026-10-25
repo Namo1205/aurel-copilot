@@ -24,6 +24,7 @@ export function Button({
   disabled,
   type = "button",
   size = "md",
+  title,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -31,6 +32,7 @@ export function Button({
   disabled?: boolean;
   type?: "button" | "submit";
   size?: "sm" | "md";
+  title?: string;
 }) {
   const v = {
     primary: "bg-brand text-white hover:bg-emerald-950 disabled:bg-stone-300",
@@ -40,7 +42,7 @@ export function Button({
   }[variant];
   const s = size === "sm" ? "px-2.5 py-1 text-xs" : "px-3.5 py-2 text-sm";
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={`rounded-md font-medium transition ${v} ${s}`}>
+    <button type={type} onClick={onClick} disabled={disabled} title={title} className={`rounded-md font-medium transition ${v} ${s}`}>
       {children}
     </button>
   );

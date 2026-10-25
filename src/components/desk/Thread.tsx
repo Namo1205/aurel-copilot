@@ -11,6 +11,7 @@ import type { ExecutionResult } from "@/lib/agent/execute";
 import { ASSISTANT_NAME, CATEGORY_ORDER, ROSTER, isOnShift, ownerName } from "@/lib/desk/roster";
 import type { Conversation } from "@/lib/desk/visibility";
 import { AttachmentPicker, InboundAttachments, PaperclipIcon, encodeFiles } from "@/components/desk/Attachments";
+import { draftGaps } from "@/lib/agent/templates";
 
 export function ago(iso: string): string {
   const t = timeAgo(iso);
@@ -205,6 +206,11 @@ export function Thread({ conversation }: { conversation: Conversation }) {
   const approvedCount = (head.approved ?? []).filter(Boolean).length;
   const handoff = p?.actions.find((a) => a.type === "handoff");
   const sorting = open ? open.status === "new" || open.status === "analyzing" : false;
+  // Guardrail in code: a reply with a placeholder still in it cannot be sent.
+  const currentDraft = open && p ? (open.draft ?? (replyMode === "manual" ? "" : p.draftReply)) : "";
+  const gaps = draftGaps(currentDraft);
+  const manualGaps = draftGaps(manualText);
+  const gapLine = (list: string[]) => (list.length ? <p className="mt-2 text-xs text-rose-700">Fill in before sending: {list.join(", ")}</p> : null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -366,11 +372,12 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
             <div className="flex items-center gap-2 flex-wrap">
-              <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim()}>
+              <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim() || manualGaps.length > 0}>
                 {busy ? "Sending…" : "Send"}
               </Button>
               {m.gmail ? <AttachmentPicker files={files} onChange={onFiles} disabled={busy} /> : null}
             </div>
+            {gapLine(manualGaps)}
             {attachError ? <p className="text-xs text-rose-700">{attachError}</p> : null}
           </div>
         ) : !p ? (
@@ -386,11 +393,12 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
             <div className="flex items-center gap-2 flex-wrap">
-              <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim()}>
+              <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim() || manualGaps.length > 0}>
                 {busy ? "Sending…" : "Send"}
               </Button>
               {m.gmail ? <AttachmentPicker files={files} onChange={onFiles} disabled={busy} /> : null}
             </div>
+            {gapLine(manualGaps)}
             {attachError ? <p className="text-xs text-rose-700">{attachError}</p> : null}
           </div>
         ) : !canAct ? (
@@ -460,7 +468,8 @@ export function Thread({ conversation }: { conversation: Conversation }) {
             <div className="mt-2 flex items-center gap-2 flex-wrap">
               <Button
                 onClick={() => executeNow(true)}
-                disabled={busy || !(open.draft ?? (replyMode === "manual" ? "" : p.draftReply)).trim()}
+                disabled={busy || !currentDraft.trim() || gaps.length > 0}
+                title={gaps.length ? `Fill in ${gaps.join(", ")} first` : undefined}
               >
                 {busy
                   ? "Sending…"
@@ -476,6 +485,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               {m.gmail ? <AttachmentPicker files={files} onChange={onFiles} disabled={busy} /> : null}
               <span className="ml-auto text-[11px] text-stone-400 xl:hidden">Booking and actions show at wider widths.</span>
             </div>
+            {gapLine(gaps)}
             {attachError ? <p className="mt-2 text-xs text-rose-700">{attachError}</p> : null}
             {sendError ? <p className="mt-2 text-xs text-rose-700">{sendError} Nothing was sent or written.</p> : null}
           </>
