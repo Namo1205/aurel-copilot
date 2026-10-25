@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isPending, useStore } from "@/lib/store";
+import { isPending, ownerLabel, useStore } from "@/lib/store";
 import { ChannelIcon, timeAgo } from "@/components/ui";
 import { CATEGORY_LABEL } from "@/lib/agent/schema";
 import { getHotel } from "@/lib/pms";
 import { redactCards } from "@/lib/agent/rules";
-import { ASSISTANT_NAME, ownerName } from "@/lib/desk/roster";
+import { ASSISTANT_NAME } from "@/lib/desk/roster";
 import type { Conversation } from "@/lib/desk/visibility";
 import { PaperclipIcon } from "@/components/desk/Attachments";
 
@@ -68,7 +68,7 @@ export function ConversationList({
           const stale = waiting && ageMin > 120;
           const mine = it.ownerId === me;
           const preview = it.result?.sentReply && !waiting ? `You: ${it.result.sentReply.body}` : it.autoSentAt && !waiting ? `${ASSISTANT_NAME}: ${it.autoSentBody ?? ""}` : (m.subject ? `${m.subject} · ` : "") + redactCards(m.body);
-          const meta = [cat ? CATEGORY_LABEL[cat] : null, hotel ? hotel.name.replace(/^Aurel /, "") : null, mine ? null : ownerName(it.ownerId), c.items.length > 1 ? `${c.items.length} messages` : null].filter(Boolean).join(" · ");
+          const meta = [cat ? CATEGORY_LABEL[cat] : null, hotel ? hotel.name.replace(/^Aurel /, "") : null, mine ? null : ownerLabel(state, it.ownerId), c.items.length > 1 ? `${c.items.length} messages` : null].filter(Boolean).join(" · ");
           return (
             <li key={c.key}>
               {idx === firstNew ? (

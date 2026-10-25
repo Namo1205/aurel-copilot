@@ -91,6 +91,22 @@ export function topicCheck(text: string): TopicVerdict {
   return { ok: true };
 }
 
+// A reply a person approves may carry their first name. If the text closes with a
+// "regards" line, the name goes on the next line; otherwise a short sign-off is appended.
+export function signOff(text: string, firstName: string): string {
+  const name = firstName.trim();
+  if (!name) return text;
+  const lines = text.replace(/\s+$/, "").split("\n");
+  const idx = lines.findIndex((l) => /^(warm|kind|best) regards,?\s*$/i.test(l.trim()));
+  if (idx >= 0) {
+    if (lines[idx + 1]?.trim().toLowerCase() === name.toLowerCase()) return text;
+    lines.splice(idx + 1, 0, name);
+    return lines.join("\n");
+  }
+  if (lines.slice(-3).some((l) => l.trim().toLowerCase() === name.toLowerCase())) return text;
+  return `${lines.join("\n")}\n\n${name}\nAurel Reservations`;
+}
+
 // Placeholders a draft still carries, such as "[confirm rate]" or "[Guest Name]". Sending
 // is blocked until they are filled in. The one placeholder the system fills itself is ignored.
 export const PAYMENT_LINK_PLACEHOLDER = "[Secure payment link will be inserted on send]";

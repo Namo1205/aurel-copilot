@@ -46,7 +46,7 @@ export function NotificationBell() {
   // while the tab is in the background. Everything else waits until you look.
   const alerted = useRef(new Set<string>());
   useEffect(() => {
-    if (!session || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (!session || !state.profiles[session.staffId]?.desktopAlerts || typeof Notification === "undefined" || Notification.permission !== "granted") return;
     for (const e of unreadEvents(state, session)) {
       if (e.kind !== "delivery_failed" || alerted.current.has(e.id)) continue;
       alerted.current.add(e.id);
@@ -62,7 +62,6 @@ export function NotificationBell() {
   const seenAt = state.notificationsSeenAt[session.staffId];
   const isUnread = (e: DeskEvent) => !seenAt || Date.parse(e.at) > Date.parse(seenAt);
   const groups = GROUP_ORDER.map((g) => ({ g, list: all.filter((e) => e.group === g) })).filter((x) => x.list.length);
-  const canAskDesktop = typeof Notification !== "undefined" && Notification.permission === "default";
 
   const openEvent = (e: DeskEvent) => {
     if (e.itemId && state.items[e.itemId]) dispatch({ type: "select", id: e.itemId });
@@ -130,13 +129,6 @@ export function NotificationBell() {
               ))
             )}
           </div>
-          {canAskDesktop ? (
-            <footer className="px-4 py-2 border-t border-stone-100 shrink-0">
-              <button onClick={() => void Notification.requestPermission()} className="text-xs text-stone-500 hover:text-stone-900 underline underline-offset-2">
-                Desktop alert when a reply fails to send
-              </button>
-            </footer>
-          ) : null}
         </div>
       ) : null}
     </div>

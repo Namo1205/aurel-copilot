@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useStore, withThreadContext, type InboxItem } from "@/lib/store";
+import { firstNameFor, ownerLabel, useStore, withThreadContext, type InboxItem } from "@/lib/store";
 import { Button, CHANNEL_LABEL, ChannelIcon, timeAgo } from "@/components/ui";
 import { CATEGORY_LABEL, type Category } from "@/lib/agent/schema";
 import { getHotel } from "@/lib/pms";
@@ -11,7 +11,7 @@ import type { ExecutionResult } from "@/lib/agent/execute";
 import { ASSISTANT_NAME, CATEGORY_ORDER, ROSTER, isOnShift, ownerName } from "@/lib/desk/roster";
 import type { Conversation } from "@/lib/desk/visibility";
 import { AttachmentPicker, InboundAttachments, PaperclipIcon, encodeFiles, useAttachDrop } from "@/components/desk/Attachments";
-import { draftGaps } from "@/lib/agent/templates";
+import { draftGaps, signOff } from "@/lib/agent/templates";
 
 export function ago(iso: string): string {
   const t = timeAgo(iso);
@@ -84,6 +84,7 @@ export function ResendBox({ item, body, error }: { item: InboxItem; body: string
 
 // One inbound message and everything we sent back for it.
 function Exchange({ item }: { item: InboxItem }) {
+  const { state } = useStore();
   const m = item.message;
   const p = item.analysis?.proposal;
   const body = redactCards(m.body);
@@ -113,7 +114,7 @@ function Exchange({ item }: { item: InboxItem }) {
         <div className="flex justify-end">
           <div className="max-w-[78%]">
             <div className="text-[11px] text-stone-400 mb-1 text-right">
-              {ownerName(item.handledBy ?? null)} · {ago(item.result.sentReply.sentAt)}
+              {ownerLabel(state, item.handledBy ?? null)} · {ago(item.result.sentReply.sentAt)}
               {item.edited ? " · edited the suggested reply" : " · suggested reply as written"}
               {item.result.sentReply.deliveredVia === "gmail" ? " · delivered" : item.result.sentReply.deliveryError ? <span className="text-rose-700"> · not delivered</span> : null}
             </div>
@@ -131,7 +132,7 @@ function Exchange({ item }: { item: InboxItem }) {
           </div>
         </div>
       ) : null}
-      {item.status === "handed_off" ? <div className="text-center text-[11px] text-stone-400">Closed without a reply by {ownerName(item.handledBy ?? null)} · {item.handledAt ? ago(item.handledAt) : ""}</div> : null}
+      {item.status === "handed_off" ? <div className="text-center text-[11px] text-stone-400">Closed without a reply by {ownerLabel(state, item.handledBy ?? null)} · {item.handledAt ? ago(item.handledAt) : ""}</div> : null}
     </>
   );
 }
@@ -168,6 +169,7 @@ export function Thread({ conversation, detailsShown, onToggleDetails }: { conver
     setBusy(true);
     try {
       const attachments = await encodeFiles(files);
+      textToSend = withSignOff(textToSend);
       let delivery: { via: "gmail"; at: string; error?: string } | undefined;
       if (m.gmail) {
         try {
@@ -219,6 +221,10 @@ export function Thread({ conversation, detailsShown, onToggleDetails }: { conver
   const gaps = draftGaps(currentDraft);
   const manualGaps = draftGaps(conversation.open ? manualText : followUpText);
   const gapLine = (list: string[]) => (list.length ? <p className="mt-2 text-xs text-rose-700">Fill in before sending: {list.join(", ")}</p> : null);
+  // Profile choice: replies this person approves carry their first name. Automatic replies never pass through here.
+  const signAs = session && state.profiles[session.staffId]?.signOff ? firstNameFor(state, session.staffId) : "";
+  const withSignOff = (text: string) => (signAs ? signOff(text, signAs) : text);
+  const signLine = signAs ? <p className="mt-1 text-[11px] text-stone-400">Signed as {signAs} · Aurel Reservations</p> : null;
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -245,7 +251,7 @@ export function Thread({ conversation, detailsShown, onToggleDetails }: { conver
       const r = await fetch("/api/execute", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: m, proposal: p, approvedActionIndexes, draftReply: open.draft ?? p.draftReply, sendReply, attachments }),
+        body: JSON.stringify({ message: m, proposal: p, approvedActionIndexes, draftReply: sendReply ? withSignOff(open.draft ?? p.draftReply) : (open.draft ?? p.draftReply), sendReply, attachments }),
       });
       if (r.status === 401) {
         dispatch({ type: "logout" });
@@ -312,7 +318,7 @@ export function Thread({ conversation, detailsShown, onToggleDetails }: { conver
           <div className="text-[11px] text-stone-400">Owner</div>
           {canOverride && open ? (
             <span className="relative inline-flex items-center gap-1 font-medium px-1 -mr-1 rounded hover:bg-stone-100" title={`${ownerTitle}\nClick to reassign.`}>
-              {ownerName(head.ownerId)}
+              {ownerLabel(state, head.ownerId)}
               {isOwner ? <span className="text-stone-400 font-normal">(you)</span> : null}
               <span className="text-stone-400 text-xs">▾</span>
               <select value={head.ownerId ?? ""} onChange={(e) => dispatch({ type: "reassign", id, ownerId: e.target.value, by: session?.staffId })} className="absolute inset-0 opacity-0 cursor-pointer">
@@ -325,7 +331,7 @@ export function Thread({ conversation, detailsShown, onToggleDetails }: { conver
             </span>
           ) : (
             <div className="font-medium" title={ownerTitle}>
-              {ownerName(head.ownerId)}
+              {ownerLabel(state, head.ownerId)}
               {isOwner ? <span className="text-stone-400 font-normal"> (you)</span> : null}
             </div>
           )}
@@ -413,6 +419,7 @@ export function Thread({ conversation, detailsShown, onToggleDetails }: { conver
               {dropHint}
             </div>
             {gapLine(manualGaps)}
+            {signLine}
             {attachError ? <p className="text-xs text-rose-700">{attachError}</p> : null}
           </div>
         ) : !p ? (
@@ -436,12 +443,13 @@ export function Thread({ conversation, detailsShown, onToggleDetails }: { conver
               {dropHint}
             </div>
             {gapLine(manualGaps)}
+            {signLine}
             {attachError ? <p className="text-xs text-rose-700">{attachError}</p> : null}
           </div>
         ) : !canAct ? (
           <div className="flex items-center justify-between text-sm text-stone-600 bg-stone-50 p-3.5 rounded-xl border border-stone-200">
             <span>
-              <span className="font-medium text-stone-800">{ownerName(open.ownerId)}</span> owns this conversation.
+              <span className="font-medium text-stone-800">{ownerLabel(state, open.ownerId)}</span> owns this conversation.
             </span>
             {session ? (
               <Button
@@ -524,6 +532,7 @@ export function Thread({ conversation, detailsShown, onToggleDetails }: { conver
               {dropHint}
             </div>
             {gapLine(gaps)}
+            {signLine}
             {attachError ? <p className="mt-2 text-xs text-rose-700">{attachError}</p> : null}
             {sendError ? <p className="mt-2 text-xs text-rose-700">{sendError}</p> : null}
           </>

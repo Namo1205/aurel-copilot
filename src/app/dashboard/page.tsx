@@ -6,7 +6,7 @@
 // Flags, not scores: the board shows items, never a ranking of people.
 
 import { useEffect, useState } from "react";
-import { NOBODY_TO_HAND_TO, isPending, useSessionGuard, useStore, type InboxItem } from "@/lib/store";
+import { NOBODY_TO_HAND_TO, isPending, ownerLabel, useSessionGuard, useStore, type InboxItem } from "@/lib/store";
 import { Badge, Section, timeAgo } from "@/components/ui";
 import { AI_OWNER_ID, ASSISTANT_NAME, ROSTER, isOnShift, ownerName } from "@/lib/desk/roster";
 import { canSeeItem } from "@/lib/desk/visibility";
@@ -167,7 +167,7 @@ export default function Dashboard() {
                   return (
                     <tr key={s.id} className={`border-b border-stone-100 last:border-0 ${f ? "bg-rose-50/60" : ""}`}>
                       <td className="py-1.5" title={`${s.role} · replied today ${mine.length} · edited the suggested reply ${edited} · changed the type ${corrected}`}>
-                        {s.name}
+                        {ownerLabel(state, s.id)}
                         {f ? (
                           <span className="ml-2">
                             <Badge tone="rose" title={FLAG_RULE}>

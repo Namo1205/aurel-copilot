@@ -6,6 +6,7 @@
 
 import type { Staff } from "@/lib/desk/roster";
 import type { View, ViewId } from "@/lib/desk/visibility";
+import { ownerLabel, useStore } from "@/lib/store";
 
 export interface TeamRow {
   s: Staff;
@@ -81,6 +82,7 @@ export function NavRail({
   collapsed: boolean;
   onToggle: () => void;
 }) {
+  const { state } = useStore();
   const work = views.filter((v) => v.section === "work");
   const record = views.filter((v) => v.section === "record");
   return (
@@ -100,7 +102,7 @@ export function NavRail({
             <Row active={focus === ""} collapsed={collapsed} label="Everyone" icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>} onClick={() => onFocus("")} title="Everyone's conversations" />
             <Row active={focus === me} collapsed={collapsed} label="Me" count={myOpen} onClick={() => onFocus(me)} title="Only my conversations" />
             {team.map(({ s, open }) => (
-              <Row key={s.id} active={focus === s.id} collapsed={collapsed} label={s.name.split(" ")[0]} count={open} hot={open >= 5} onClick={() => onFocus(s.id)} title={`${s.name} · ${open} open`} />
+              <Row key={s.id} active={focus === s.id} collapsed={collapsed} label={ownerLabel(state, s.id).split(" ")[0]} count={open} hot={open >= 5} onClick={() => onFocus(s.id)} title={`${ownerLabel(state, s.id)} · ${open} open`} />
             ))}
           </>
         ) : null}

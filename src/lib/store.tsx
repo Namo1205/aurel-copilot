@@ -13,7 +13,7 @@ import type { Booking, Trace } from "@/lib/pms";
 import { BOOKINGS, createTrace, getBooking, getGuest, getHotel } from "@/lib/pms";
 import { TEMPLATES } from "@/lib/agent/templates";
 import { importItems, syncMailbox, type SyncItem } from "@/lib/desk/sync";
-import { AI_OWNER_ID, MAILBOX_OWNER_ID, ROSTER, assignOwner, importantReasons, isOnShift, queueFor, shiftEnded, staffById, type Queue, type Role, type ShiftOverrides } from "@/lib/desk/roster";
+import { AI_OWNER_ID, MAILBOX_OWNER_ID, ROSTER, assignOwner, importantReasons, isOnShift, ownerName, queueFor, shiftEnded, staffById, type Queue, type Role, type ShiftOverrides } from "@/lib/desk/roster";
 
 export type ItemStatus = "new" | "analyzing" | "drafted" | "sent" | "handed_off" | "auto_sent";
 
@@ -118,6 +118,27 @@ export interface State {
   mailboxSync: { status: "idle" | "running" | "done" | "error"; loaded: number; estimate: number; at: string | null; error?: string };
   // Layout choices, per person: rail collapsed, list width, details panel hidden.
   prefs: Record<string, Prefs>;
+  // What colleagues see and how they reach you; sign-off and alert choices. Per person.
+  profiles: Record<string, Profile>;
+}
+
+export interface Profile {
+  displayName?: string;
+  email?: string;
+  phone?: string;
+  // Replies a person approves end with their first name. Automatic replies never do.
+  signOff?: boolean;
+  desktopAlerts?: boolean;
+}
+
+// The name shown for a person: their profile's display name when set, else the roster.
+export function ownerLabel(state: Pick<State, "profiles">, id: string | null): string {
+  const custom = id ? state.profiles[id]?.displayName?.trim() : "";
+  return custom || ownerName(id);
+}
+
+export function firstNameFor(state: Pick<State, "profiles">, staffId: string): string {
+  return ownerLabel(state, staffId).split(/\s+/)[0] || "";
 }
 
 export interface Prefs {
@@ -160,13 +181,14 @@ export type Action =
   | { type: "mailbox_sync"; sync: Partial<State["mailboxSync"]> }
   | { type: "followup_dismiss"; id: string }
   | { type: "set_pref"; staffId: string; pref: Prefs }
+  | { type: "set_profile"; staffId: string; profile: Partial<Profile> }
   | { type: "list_opened"; staffId: string }
   | { type: "list_left"; staffId: string; at: string }
   | { type: "reset" };
 
 const KEY = "aurel-desk-state-v2";
 
-const EMPTY: State = { items: {}, order: [], traces: [], handoffs: [], bookingUpdates: [], selectedId: null, hydrated: false, rotation: 0, session: null, gmail: null, samples: "none", shiftOverrides: {}, handovers: [], events: [], notificationsSeenAt: {}, listSeen: {}, mailboxSync: { status: "idle", loaded: 0, estimate: 0, at: null }, prefs: {} };
+const EMPTY: State = { items: {}, order: [], traces: [], handoffs: [], bookingUpdates: [], selectedId: null, hydrated: false, rotation: 0, session: null, gmail: null, samples: "none", shiftOverrides: {}, handovers: [], events: [], notificationsSeenAt: {}, listSeen: {}, mailboxSync: { status: "idle", loaded: 0, estimate: 0, at: null }, prefs: {}, profiles: {} };
 export const EMPTY_STATE: State = { ...EMPTY, hydrated: true };
 
 // The desk starts empty. Sample messages are loaded only in demo mode (no mailbox
@@ -720,6 +742,8 @@ export function reducer(state: State, action: Action): State {
     }
     case "set_pref":
       return { ...state, prefs: { ...state.prefs, [action.staffId]: { ...state.prefs[action.staffId], ...action.pref } } };
+    case "set_profile":
+      return { ...state, profiles: { ...state.profiles, [action.staffId]: { ...state.profiles[action.staffId], ...action.profile } } };
     case "followup_dismiss": {
       const it = state.items[action.id];
       if (!it?.followUp) return state;

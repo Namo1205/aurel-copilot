@@ -1,26 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { isPending, useStore } from "@/lib/store";
-import { isOnShift, staffById } from "@/lib/desk/roster";
 import { NotificationBell } from "@/components/NotificationBell";
+import { ProfileMenu } from "@/components/ProfileMenu";
+
+interface Health {
+  engine: string;
+  model: string | null;
+  used?: number;
+  capacity?: number;
+  usage?: { model: string; used: number; limit: number }[];
+}
 
 export function Nav() {
   const path = usePathname();
-  const router = useRouter();
-  const { state, dispatch } = useStore();
-  const [health, setHealth] = useState<{ engine: string; model: string | null; used?: number; capacity?: number; usage?: { model: string; used: number; limit: number }[] } | null>(null);
-  const [now, setNow] = useState(() => new Date());
+  const { state } = useStore();
+  const [health, setHealth] = useState<Health | null>(null);
   const gmail = state.gmail;
-  const me = state.session ? staffById(state.session.staffId) : undefined;
-  const onShift = me ? isOnShift(me, now, state.shiftOverrides) : false;
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 60000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     const load = () =>
@@ -33,24 +32,50 @@ export function Nav() {
     return () => clearInterval(t);
   }, []);
 
-  // Plain words for the team: what sorts their mail right now, and only the detail that changes what they do.
+  // One status for the whole desk: the mailbox and what sorts the mail, in plain words.
+  // The detail that only matters when something is wrong lives in the tooltip.
   const live = health?.engine === "gemini";
   const used = health?.used ?? 0;
   const capacity = health?.capacity ?? 0;
   const nearLimit = live && capacity > 0 && used / capacity >= 0.8;
-  const assistantLabel = !live ? "Aurel Assistant: rules only" : nearLimit ? `Aurel Assistant: ${used} of ${capacity} requests used today` : "Aurel Assistant on";
-  const assistantTone = live && !nearLimit ? "green" : "amber";
-  const assistantTip = live
-    ? `Sorting and drafting with the language model. Requests since the server started, per model (free tier allows ${health?.usage?.[0]?.limit ?? 20} a day each): ${(health?.usage ?? []).map((u) => `${u.model} ${u.used}/${u.limit}`).join(" · ")}. When every model is used up for the day the rules engine takes over and says so on each item.`
-    : "No model key set: the deterministic rules engine sorts messages and writes plainer drafts. Nothing is lost.";
+  let dot = "bg-stone-300";
+  let label = "Demo";
+  if (gmail?.configured) {
+    if (gmail.error || !gmail.address) {
+      dot = "bg-rose-500";
+      label = "Mailbox not reachable";
+    } else if (!gmail.send) {
+      dot = "bg-amber-400";
+      label = "Mailbox read only";
+    } else if (!live) {
+      dot = "bg-amber-400";
+      label = "Live · rules only";
+    } else if (nearLimit) {
+      dot = "bg-amber-400";
+      label = `Live · ${used} of ${capacity} requests used`;
+    } else {
+      dot = "bg-emerald-500";
+      label = "Live";
+    }
+  } else if (health && !live) {
+    dot = "bg-amber-400";
+    label = "Demo · rules only";
+  }
+  const statusTip = [
+    gmail?.configured ? (gmail.address ? `Mailbox: ${gmail.address}${gmail.send ? ", sending on." : ", read only."}` : `Mailbox: ${gmail.error ?? "not reachable."}`) : "No mailbox connected: the desk shows the sample messages.",
+    live
+      ? `Aurel Assistant sorts and drafts with the language model. Requests since the server started, per model (free tier allows ${health?.usage?.[0]?.limit ?? 20} a day each): ${(health?.usage ?? []).map((u) => `${u.model} ${u.used}/${u.limit}`).join(" · ")}. When every model is used up the rules engine takes over and says so on each item.`
+      : "Aurel Assistant is on the deterministic rules engine: no model key set, or every model used up for the day. Nothing is lost; drafts are plainer.",
+  ].join("\n");
 
   const openTraces = state.traces.filter((t) => t.status !== "done").length;
   const pending = state.order.filter((id) => isPending(state.items[id])).length;
+  const sync = state.mailboxSync;
 
   const tab = (href: string, label: string, count?: number) => {
     const on = path === href;
     return (
-      <Link href={href} className={`relative px-3 h-14 flex items-center text-sm transition ${on ? "text-stone-900 font-medium" : "text-stone-500 hover:text-stone-900"}`}>
+      <Link href={href} className={`relative px-3 h-14 flex items-center text-sm whitespace-nowrap transition ${on ? "text-stone-900 font-medium" : "text-stone-500 hover:text-stone-900"}`}>
         {label}
         {count ? <span className={`ml-1.5 text-xs tabular-nums ${on ? "text-stone-500" : "text-stone-400"}`}>{count}</span> : null}
         {on ? <span className="absolute left-2 right-2 bottom-0 h-0.5 bg-brand rounded-full" /> : null}
@@ -61,12 +86,12 @@ export function Nav() {
   return (
     <header className="border-b border-stone-200 bg-white sticky top-0 z-20">
       <div className="px-4 h-14 flex items-center gap-6">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2 whitespace-nowrap shrink-0">
           <span className="h-7 w-7 rounded-md bg-brand text-white grid place-items-center font-semibold text-sm">A</span>
           <span className="font-semibold tracking-tight">Aurel Reservations</span>
         </Link>
         {state.session ? (
-          <nav className="flex items-center">
+          <nav className="flex items-center whitespace-nowrap">
             {tab("/", "Desk", pending)}
             {tab("/dashboard", "Dashboard")}
             {tab("/ops", "PMS traces", openTraces)}
@@ -74,60 +99,25 @@ export function Nav() {
           </nav>
         ) : null}
         <div className="ml-auto flex items-center gap-4 text-sm">
-          {gmail?.configured ? (
-            <span className="flex items-center gap-1.5 text-xs text-stone-500" title={gmail.error ? `Gmail error: ${gmail.error}` : gmail.send ? "Live mailbox: new mail arrives here and approved replies are really sent" : "Live mailbox, read only"}>
-              <span className={`h-2 w-2 rounded-full ${gmail.error ? "bg-rose-500" : "bg-emerald-500"}`} />
-              {gmail.address ? `Live mail: ${gmail.address}${gmail.send ? "" : " (read only)"}` : "Mailbox not reachable"}
-            </span>
-          ) : null}
-          {state.mailboxSync.status === "running" ? (
-            <span className="flex items-center gap-1.5 text-xs text-stone-500" title="Loading every conversation in the mailbox into this browser. Answered ones come back closed with their reply; unanswered ones are sorted and owned.">
+          {sync.status === "running" ? (
+            <span className="flex items-center gap-1.5 text-xs text-stone-500 whitespace-nowrap" title="Loading every conversation in the mailbox into this browser. Answered ones come back closed with their reply; unanswered ones are sorted and owned.">
               <span className="h-3 w-3 rounded-full border-2 border-stone-300 border-t-brand animate-spin" />
-              Loading mailbox{state.mailboxSync.loaded ? ` · ${state.mailboxSync.loaded}${state.mailboxSync.estimate ? ` of about ${state.mailboxSync.estimate}` : ""}` : "…"}
+              Loading mailbox{sync.loaded ? ` · ${sync.loaded}${sync.estimate ? ` of about ${sync.estimate}` : ""}` : "…"}
             </span>
-          ) : state.mailboxSync.status === "error" ? (
-            <span className="flex items-center gap-1.5 text-xs text-rose-700" title={state.mailboxSync.error}>
+          ) : sync.status === "error" ? (
+            <span className="flex items-center gap-1.5 text-xs text-rose-700 whitespace-nowrap" title={sync.error}>
               <span className="h-2 w-2 rounded-full bg-rose-500" />
               Mailbox could not be loaded
             </span>
           ) : null}
-          {health ? (
-            <span className="flex items-center gap-1.5 text-xs text-stone-500" title={assistantTip}>
-              <span className={`h-2 w-2 rounded-full ${assistantTone === "green" ? "bg-emerald-500" : "bg-amber-400"}`} />
-              {assistantLabel}
+          {health || gmail ? (
+            <span className="flex items-center gap-1.5 text-xs text-stone-500 whitespace-nowrap" title={statusTip}>
+              <span className={`h-2 w-2 rounded-full ${dot}`} />
+              {label}
             </span>
           ) : null}
           {state.session ? <NotificationBell /> : null}
-          {state.session ? (
-            <span className="flex items-center gap-3 text-stone-600">
-              <span>
-                {state.session.name} <span className="text-stone-400">· {state.session.role}</span>
-              </span>
-              {me ? (
-                <span className="flex items-center gap-1.5 text-xs text-stone-500">
-                  <span className={`h-2 w-2 rounded-full ${onShift ? "bg-emerald-500" : "bg-stone-300"}`} />
-                  {onShift ? `On shift${me.shift ? ` until ${me.shift.end}` : ""}` : "Off shift"}
-                  <button
-                    onClick={() => dispatch({ type: "shift_override", staffId: me.id, on: !onShift })}
-                    className="underline hover:text-stone-900"
-                    title={onShift ? "Your pending items move to colleagues on shift by the owner rule, and the dashboard logs it." : "Take items again."}
-                  >
-                    {onShift ? "End my shift" : "Start my shift"}
-                  </button>
-                </span>
-              ) : null}
-              <button
-                onClick={() => {
-                  void fetch("/api/logout", { method: "POST" }).catch(() => undefined);
-                  dispatch({ type: "logout" });
-                  router.replace("/login");
-                }}
-                className="text-stone-500 hover:text-stone-900"
-              >
-                Sign out
-              </button>
-            </span>
-          ) : null}
+          {state.session ? <ProfileMenu /> : null}
         </div>
       </div>
     </header>
