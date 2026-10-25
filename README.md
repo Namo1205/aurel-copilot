@@ -1,6 +1,6 @@
 # Aurel Reservations AI Agent
 
-Prototype for the Aurel Hotels AI PM take-home. An AI agent reads every email and WhatsApp message to the central reservations desk, marks its type, assigns a named owner, drafts the reply with live PMS prices and the hotel's own policy, turns requests into PMS traces, and sends alone only what cannot go wrong: cited policy answers, a fixed question back when a policy question names no hotel, and the fixed templates. A message is sorted together with the guest's earlier messages in the same conversation, so a one-word reply such as "Lisboa" completes the earlier question. People approve the rest in one click. A dashboard shows every owner's pending work.
+Prototype for the Aurel Hotels AI PM take-home. An AI agent reads every email to the central reservations desk (WhatsApp and OTA messaging follow next quarter), marks its type, assigns a named owner, drafts the reply with live PMS prices and the hotel's own policy, turns requests into PMS traces, and sends alone only what cannot go wrong: cited policy answers, a fixed question back when a policy question names no hotel, and the fixed templates. A message is sorted together with the guest's earlier messages in the same conversation, so a one-word reply such as "Lisboa" completes the earlier question. People approve the rest in one click. A dashboard shows every owner's pending work.
 
 Deliverables are in [`docs/`](docs/):
 
@@ -40,22 +40,22 @@ Four roles, one shared password: `aurel` locally, or whatever `DESK_PASSWORD` is
 
 | Role | Deep link | What they see first |
 |---|---|---|
-| Reservations agent | `/login?as=agt-1` | Important view, own queue |
-| Senior agent | `/login?as=snr-1` | Same, plus reassignment and the team table on the dashboard |
-| Reservations manager | `/login?as=mgr-1` | Dashboard, then the Manager queue |
-| Groups & events specialist | `/login?as=grp-1` | Sales queue |
+| Reservations agent | `/login?as=agt-1` | Open: their own conversations |
+| Senior agent | `/login?as=snr-1` | Same, plus Important, Sent alone, the Team section of the rail and reassignment |
+| Reservations manager | `/login?as=mgr-1` | Dashboard, then Needs a manager |
+| Groups & events specialist | `/login?as=grp-1` | Open: group and event conversations |
 
 Hotel department staff are not users: traces are written to the (simulated) PMS. The **PMS traces** page stands in for the hotel's PMS list.
 
 ## What to click
 
-The desk is a conversation view: the list on the left, the thread in the middle with the AI agent's draft sitting in the composer, booking and actions in the panel on the right. Each role sees only what they are responsible for:
+The desk is a conversation view: the rail and the list on the left, the thread in the middle with Aurel Assistant's suggested reply sitting in the composer, booking and actions in the panel on the right. Each role sees only what they are responsible for:
 
 | Role | Sees | Lands on |
 |---|---|---|
 | Agent | Their own conversations, open and done | Open |
-| Senior | Their own plus every agent's, with a team rail to focus on one agent and reassign | Open |
-| Manager | Everything, plus the Manager view (exceptions) and the Sent-alone log | Dashboard, then Manager |
+| Senior | Their own plus every agent's, with the Team section of the rail to focus on one agent and reassign | Open |
+| Manager | Everything, plus Needs a manager (exceptions) and Sent alone | Dashboard, then Needs a manager |
 | Groups specialist | Sales conversations only | Open |
 
 With a mailbox connected the desk starts empty and shows only real guest mail. Without one it loads the thirteen sample messages from the brief; they are also one click away on the sign-in page, or at `/?samples=load`. "Remove the sample messages" on the sign-in page takes only the samples off; real mail is never cleared from a production build.
@@ -66,21 +66,23 @@ Two limits worth knowing. Unanswered old mail is sorted by the language model on
 
 **Follow-up on quiet quotes:** when a reply that carried a price quote has had no answer for 48 hours and the guest has not written again, the owner finds a prepared follow-up in the thread (Done view, "Follow-up suggested") and a row in the bell. It does not repeat the price, since rates are live. A person sends it or dismisses it; it is never sent alone, and there is one per quote. `NEXT_PUBLIC_QUOTE_FOLLOW_UP_HOURS=0.02` makes it appear within a minute for rehearsals.
 
+**You:** the avatar at the far right of the header opens your shift (End my shift / Start my shift), **My profile** and Sign out. The profile holds your display name, work email and phone, a switch to sign the replies you approve with your first name (answers Aurel Assistant sends alone stay signed as the team), and the desktop alert for a reply that failed to send. Kept per person in the browser.
+
 **Layout:** the rail on the left holds the views, Work (what needs people), Record (sent alone, done) and, for seniors and managers, the Team; the chevron at its foot collapses it to icons. Drag the edge of the conversation list to resize it, double-click to reset. The panel icon in the thread header shows or hides the booking and actions; on a narrow window it opens as a sheet. All three are remembered per person in the browser.
 
 **Notifications:** the bell in the header carries only what the list cannot show: a reply the guest did not receive, conversations moved to you by a senior or at a shift end, a guest replying to a conversation you closed, items in your queue over an hour old, and your shift ending with work open. Seniors and managers also see agents with several overdue items, manager-queue arrivals and handovers that found nobody. New arrivals are not notifications; the list marks them with a "new since you last looked" line. Read state is per person.
 
 **Attachments:** files a guest sends show under their message as chips and open through the desk, fetched from the mailbox on demand; Aurel Assistant is told only that attachments exist, never what is in them. A reply can carry up to 3 files, 3 MB in total (the hosting request limit after encoding); they are sent inside the email and the thread records only the names. The assistant never sends an attachment alone.
 
-**Live:** keep a desk tab open, email the desk address from any account. Within 20 seconds the conversation appears, sorted, with an owner. A policy question is answered alone and shows as the AI agent's bubble; the reply lands in your inbox in the same thread. Anything else waits in the composer for the owner: read the draft, check the actions in the right panel, press **Approve & send**. A guest's later reply joins the same thread.
+**Live:** keep a desk tab open, email the desk address from any account. Within 20 seconds the conversation appears, sorted, with an owner. A policy question is answered alone and shows as Aurel Assistant's bubble under Sent alone; the reply lands in your inbox in the same thread. Anything else waits in the composer for the owner: read the draft, check the actions in the right panel, press **Approve & send**. A guest's later reply joins the same thread.
 
-**Samples:** sign in as an agent on shift (`/login?as=agt-5`), load the samples. **Priya Sharma** is a within-rules date change plus two traces; approve it and the traces land in **PMS traces**. Sign in as a senior (`/login?as=snr-2`) for the team rail, Important and Sent alone; as the manager (`/login?as=mgr-2`) for Tomás Herrera's compassionate cancellation (holding reply already sent by the AI agent, follow-up waiting for the manager) and **Run day-before check** on the dashboard.
+**Samples:** sign in as an agent on shift (`/login?as=agt-5`), load the samples. **Priya Sharma** is a within-rules date change plus two traces; approve it and the traces land in **PMS traces**. Sign in as a senior (`/login?as=snr-2`) for the Team section, Important and Sent alone; as the manager (`/login?as=mgr-2`) for Tomás Herrera's compassionate cancellation (holding reply already sent by Aurel Assistant, follow-up waiting for the manager) and **Run day-before check** on the dashboard.
 
 **When something fails:** if Gmail cannot deliver a reply, the bubble turns red with "The guest has not received this", the text in an editable box and **Send again**; only the email is resent. If sorting fails, the thread offers **Try again** and **Write the reply yourself**.
 
 **Shift end:** the header shows your shift. **End my shift** moves your open conversations to colleagues on shift by the owner rule and the dashboard lists the handovers; shifts also end on the clock. If nobody of your role is on shift the item stays with you, flagged.
 
-Deep links: `/?tab=auto&item=m-013` opens a view and the conversation holding that message; `/login?as=agt-5&next=%2F%3Fsamples%3Dload` signs in and loads samples. "Clear the desk" on the sign-in page removes everything.
+Deep links: `/?tab=auto&item=m-013` opens a view and the conversation holding that message; `/login?as=agt-5&next=%2F%3Fsamples%3Dload` signs in and loads samples. "Remove the sample messages" on the sign-in page takes only the samples off; real mail stays.
 
 ## Policy handbooks and search
 
