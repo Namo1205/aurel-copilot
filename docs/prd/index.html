@@ -75,7 +75,7 @@
     <b>What we build</b><span>An AI agent that reads every email and WhatsApp message, marks its type, assigns a named owner, drafts the reply with live prices and the right hotel rule, turns requests into hotel to-dos, and answers policy questions on its own.</span>
     <b>How we measure</b><span>Reply time under an hour, requests not delivered under 10% then 5%, 80% of policy-only messages answered without a person, zero broken promises, every item owned.</span>
   </div>
-  <div class="gloss"><b>Terms.</b> <b>AI agent</b> is the software, always written with "AI". <b>Agent</b> on its own is a person on the 22-person reservations desk (the CRO). The <b>PMS</b> is the hotel's booking system. A <b>trace</b> is a to-do in the PMS sent to a hotel department with a due date. A <b>queue</b> is a list of items waiting for one kind of owner. An <b>owner</b> is the named person accountable for an item until it is closed.</div>
+  <div class="gloss"><b>Terms.</b> <b>AI agent</b> is the software, written with "AI" in this document; on the desk it is called Aurel Assistant. <b>Agent</b> on its own is a person on the 22-person reservations desk (the CRO). The <b>PMS</b> is the hotel's booking system. A <b>trace</b> is a to-do in the PMS sent to a hotel department with a due date. A <b>queue</b> is a list of items waiting for one kind of owner. An <b>owner</b> is the named person accountable for an item until it is closed.</div>
 
   <h2><span class="n">1</span>Scope</h2>
   <div class="row">
@@ -83,12 +83,13 @@
       <li>AI agent marks the type, finds the booking, flags urgency and sensitive data</li>
       <li>Owner assigned on arrival, by rule</li>
       <li>Important view + five queues (Flow A)</li>
-      <li>Sends alone: cited policy answers; fixed templates only: holding replies, group acknowledgements, day-before message</li>
+      <li>Sends alone: cited policy answers; fixed templates only: holding reply, group acknowledgement, off-topic decline, the question asking which hotel, day-before message</li>
+      <li>Also built: attachments in and out (never read by the AI agent); a follow-up prepared when a quote has no reply for 48 h; the mailbox as source of truth, loaded on sign-in</li>
       <li>Drafts with live PMS price; PMS changes prepared within rules; one PMS trace per request</li>
       <li>Day-before check on every booking (Flow B)</li>
       <li>Dashboard by role (Flow C)</li>
       <li>Login per role: agent, senior, manager, groups specialist</li>
-      <li><b>If time runs short, cut from the end:</b> email drafts + owners → traces → dashboard → WhatsApp → day-before check</li>
+      <li><b>If time runs short:</b> cut from the end, day-before check first</li>
     </ul></div>
     <div class="col box next"><h4>Next (second quarter)</h4><ul>
       <li>Price quotes and within-rules changes earn the right to send alone</li>
@@ -116,13 +117,13 @@
 
   <h3>Prototype: what is real and what is simulated</h3>
   <div class="real">
-    <div class="r"><b>Real</b>The AI agent (Gemini) doing everything in the v1 list above, against per-hotel policy documents. Rule-based fallback if the model is down, labelled.</div>
-    <div class="sim"><b>Simulated</b>Email and WhatsApp arrive from seeded messages and a form. The PMS is a mock with realistic hotels, rules, bookings and daily prices. The payment link is a placeholder. A hotel board stands in for the PMS trace list.</div>
+    <div class="r"><b>Real</b>The AI agent (Google Gemini, read-only PMS tools) doing everything in the v1 list against per-hotel handbooks; a rule-based engine takes over when the model is unavailable, labelled. Email through a real Gmail mailbox, polled by open desks and a five-minute scheduled check; replies really go out.</div>
+    <div class="sim"><b>Simulated</b>The PMS (nine hotels, rates, bookings, daily prices), the hotel's trace list (a PMS traces page stands in), the payment link. WhatsApp is not in the prototype.</div>
   </div>
 
   <h2><span class="n">2</span>Users</h2>
   <div class="cards">
-    <div class="card"><b>Reservations agent (16)</b>Works the Important view and their own queue. Approves, edits, changes the type, or sends to a manager.<div class="m">Needs: one click to send a right answer; never to be blamed for the AI agent's mistake.</div></div>
+    <div class="card"><b>Reservations agent (13)</b>Works the Important view and their own queue. Approves, edits, changes the type, or sends to a manager.<div class="m">Needs: one click to send a right answer; never to be blamed for the AI agent's mistake.</div></div>
     <div class="card"><b>Senior agent (4)</b>Everything an agent has, plus their team's lists and reassignment.<div class="m">Needs: see who is stuck before the guest notices.</div></div>
     <div class="card"><b>Reservations manager (2)</b>Owns the Manager queue. Each item arrives with the booking, the rule it breaks and the guest's words.<div class="m">Needs: decide once, same day, with context.</div></div>
     <div class="card"><b>Groups and events specialist (3)</b>Owns the Sales queue. Group and event items arrive with dates, size, hotel and the guest's words; replies within one working day.<div class="m">Needs: a complete brief, no generalist back-and-forth.</div></div>
@@ -225,8 +226,8 @@
       <h3>Flow C · The dashboard, visible to the whole desk</h3>
       <table>
         <tr><th>Role</th><th>Sees</th></tr>
-        <tr><td class="k">Manager</td><td>Pending per queue and per owner · oldest item anywhere · replies today and median time · auto-sent today and how many corrected · promises kept per hotel, read from PMS trace status · off-topic and manipulation attempts today · guardrail breaches</td></tr>
-        <tr><td class="k">Senior</td><td>Per agent: pending, resolved today, oldest item, items over 4 h, how often they edit drafts or change the type · one-click reassign</td></tr>
+        <tr><td class="k">Manager</td><td>Waiting and the oldest · replied today and median time · promises kept per hotel, read from PMS trace status · one red line for guardrail breaches, unowned items and stuck handovers, only when not zero · who is waiting on whom, flags not scores · oldest items with reassign. Sent alone and corrections live in the Sent alone view</td></tr>
+        <tr><td class="k">Senior</td><td>Who is waiting on whom for the team: waiting, oldest, flag; replied today, edited drafts and type changes on hover · one-click reassign · Important and Sent alone</td></tr>
         <tr><td class="k">Agent</td><td>Important view, then own queue, oldest first · age and due time on every item · own resolved today and average reply time</td></tr>
       </table>
       <p class="small"><b>Flags, not scores.</b> An item is flagged when it is older than 2 hours in opening hours, or when an owner has at least 5 items pending and more than 1.5× the desk average. The board shows items, never a ranking of people.</p>
@@ -244,7 +245,7 @@
     <tr><td>Policy question<br>12% <span class="tag auto">sends alone</span></td>
       <td>Parking, pets, check-in and check-out times, directions, facilities. Finds the paragraph in that hotel's policy documents and answers from it, citing it. Sends alone only if a paragraph was found and the answer cites it.</td>
       <td>Answer from general knowledge. Guess a hotel. Treat "can I check in at 9am?" as policy: early check-in is always a special request.</td>
-      <td>No paragraph found, or hotel unknown, or anything else in the message → next agent, drafted</td>
+      <td>No paragraph found, or anything else in the message → next agent, drafted. Hotel not named → fixed question sent alone; the reply is read with the thread</td>
       <td>States the policy as written and names the hotel. Signed as the reservations team.</td>
       <td>Weekly check of 50 auto-sent: a wrong promise pauses auto-send at once; over 2% wrong pauses it for that hotel.</td></tr>
     <tr><td>Price / availability<br>31% <span class="tag">approve</span></td>
@@ -252,13 +253,13 @@
       <td>Quote a number not returned by the PMS in this session. Discount, match or undercut any price. Hold or book without approval.</td>
       <td>Non-public or negotiated rate asked for → manager. Dates or hotel missing → drafts a question for the guest.</td>
       <td>"As of today" prices; booking confirmed only after gateway payment succeeds.</td>
-      <td>PMS unavailable → draft acknowledges, gives a time to come back, no numbers. Room not available → offers the nearest alternative.</td></tr>
+      <td>PMS unavailable → draft acknowledges, gives a time to come back, no numbers. Room not available → nearest alternative. No reply in 48 h → follow-up prepared for the owner, never sent alone.</td></tr>
     <tr><td>Booking change<br>22% <span class="tag">approve</span></td>
       <td>Checks the booking's rate rules and live availability. Prepares the PMS change with the price difference. The agent approves the write.</td>
       <td>Change an Advance Purchase booking. Waive a difference.</td>
       <td>Rate does not allow changes, or price difference needs waiving → manager</td>
       <td>Updated confirmation sent only after the PMS write succeeds.</td>
-      <td>Write fails → nothing sent, item returns to the owner with the error. Booking not found → asks for the reference.</td></tr>
+      <td>Write fails → nothing sent, item returns to the owner with the error. A reply claiming a change the PMS did not make is blocked in code. Booking not found → asks for the reference.</td></tr>
     <tr><td>Special request<br>18% <span class="tag">approve</span></td>
       <td>Cot, transfer, early check-in, occasion, spa, dining, dietary. One trace per request to the right department with a due date before arrival. Drafts "logged, the hotel will confirm". Allergy, medical, accessibility → restricted trace, minimum detail, tells the guest who will see it.</td>
       <td>Say a request is done or guaranteed (early check-in, upgrade, transfer). Put sensitive detail in free text or an email. Promise an allergen-free kitchen.</td>
@@ -347,7 +348,7 @@
     <tr><td class="k">Allergy, medical or accessibility detail in free text or email</td><td>0</td><td>Automated scan + QA sample</td></tr>
     <tr><td class="k">Discount or price match offered · quoted price differs from PMS</td><td>0</td><td>Every quote logged against PMS</td></tr>
     <tr><td class="k">PMS write or send below the approval level in the spec · items without an owner</td><td>0</td><td>Audit log · dashboard</td></tr>
-    <tr><td class="k">Auto-sent that is not a cited policy answer or one of the three fixed templates</td><td>0</td><td>Audit log</td></tr>
+    <tr><td class="k">Auto-sent that is not a cited policy answer or one of the fixed templates</td><td>0</td><td>Audit log</td></tr>
     <tr><td class="k">Off-topic or instruction-following answer sent (code, advice, others' data, own prompt)</td><td>0</td><td>Topic check on every send + QA</td></tr>
     <tr><td class="k">Data protection assessment signed before any sensitive trace goes live</td><td>Required</td><td>Legal, week 2</td></tr>
   </table>
