@@ -66,14 +66,17 @@ export interface View {
   id: ViewId;
   label: string;
   filter: (c: Conversation) => boolean;
+  // Work: what needs people now. Record: what was sent alone and what is done.
+  section: "work" | "record";
+  icon: "inbox" | "flag" | "shield" | "all" | "sent" | "done";
 }
 
 // The views each role gets. The first is where they land.
 export function viewsFor(role: Role): View[] {
-  const open: View = { id: "open", label: "Open", filter: (c) => !!c.open };
-  const done: View = { id: "done", label: "Done", filter: (c) => !c.open };
-  const important: View = { id: "important", label: "Important", filter: (c) => !!c.open && c.open.important.length > 0 };
-  const auto: View = { id: "auto", label: "Sent alone", filter: (c) => c.items.some((i) => !!i.autoSentAt) };
+  const open: View = { id: "open", label: "Open", filter: (c) => !!c.open, section: "work", icon: "inbox" };
+  const done: View = { id: "done", label: "Done", filter: (c) => !c.open, section: "record", icon: "done" };
+  const important: View = { id: "important", label: "Important", filter: (c) => !!c.open && c.open.important.length > 0, section: "work", icon: "flag" };
+  const auto: View = { id: "auto", label: "Sent alone", filter: (c) => c.items.some((i) => !!i.autoSentAt), section: "record", icon: "sent" };
   switch (role) {
     case "agent":
       return [open, done];
@@ -83,9 +86,9 @@ export function viewsFor(role: Role): View[] {
       return [open, important, auto, done];
     case "manager":
       return [
-        { id: "manager", label: "Manager", filter: (c) => !!c.open && c.open.queue === "manager" },
+        { id: "manager", label: "Needs a manager", filter: (c) => !!c.open && c.open.queue === "manager", section: "work", icon: "shield" },
         important,
-        { id: "all", label: "All open", filter: (c) => !!c.open },
+        { id: "all", label: "All open", filter: (c) => !!c.open, section: "work", icon: "all" },
         auto,
         done,
       ];

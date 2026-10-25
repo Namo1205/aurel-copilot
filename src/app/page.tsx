@@ -1,14 +1,22 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import { isPending, useSessionGuard, useStore } from "@/lib/store";
+import { isPending, useSessionGuard, useStore, type Prefs } from "@/lib/store";
 import { ConversationList } from "@/components/desk/ConversationList";
 import { Thread } from "@/components/desk/Thread";
 import { ContextPanel } from "@/components/desk/ContextPanel";
 import { Compose } from "@/components/desk/Compose";
+import { NavRail } from "@/components/desk/NavRail";
+import { useMediaQuery } from "@/components/ui";
 import { conversationKey, conversationsFor, viewsFor, type View, type ViewId } from "@/lib/desk/visibility";
 import { ROSTER, isOnShift } from "@/lib/desk/roster";
+
+// The conversation list can be dragged between these widths; double-click resets.
+const LIST_MIN = 260;
+const LIST_MAX = 480;
+const LIST_DEFAULT = 320;
+const clampWidth = (w: number) => Math.min(LIST_MAX, Math.max(LIST_MIN, Math.round(w)));
 
 export default function Desk() {
   return (
@@ -53,8 +61,35 @@ function DeskInner() {
     };
   }, [state.hydrated, staffId, dispatch]);
   const newSince = staffId ? (state.listSeen[staffId]?.newSince ?? null) : null;
-  const [focus, setFocus] = useState<string>(""); // seniors: one agent's conversations
+  const [focus, setFocus] = useState<string>(""); // seniors and managers: one agent's conversations
   const [now] = useState(() => new Date());
+
+  // Layout preferences, remembered per person: rail collapsed, list width, details shown.
+  const prefs: Prefs = (staffId && state.prefs[staffId]) || {};
+  const setPref = (pref: Prefs) => staffId && dispatch({ type: "set_pref", staffId, pref });
+  const railCollapsed = !!prefs.railCollapsed;
+  const savedWidth = clampWidth(prefs.listWidth ?? LIST_DEFAULT);
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const listWidth = dragWidth ?? savedWidth;
+  const dragStart = useRef<{ x: number; w: number } | null>(null);
+  const onHandleDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    dragStart.current = { x: e.clientX, w: listWidth };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onHandleMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragStart.current) setDragWidth(clampWidth(dragStart.current.w + e.clientX - dragStart.current.x));
+  };
+  const onHandleUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragStart.current) return;
+    setPref({ listWidth: clampWidth(dragStart.current.w + e.clientX - dragStart.current.x) });
+    dragStart.current = null;
+    setDragWidth(null);
+  };
+  // Wide screens show the details panel beside the thread; narrow ones open it as a sheet.
+  const isWide = useMediaQuery("(min-width: 1280px)");
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const detailsShown = isWide ? !prefs.detailsHidden : sheetOpen;
+  const toggleDetails = () => (isWide ? setPref({ detailsHidden: !prefs.detailsHidden }) : setSheetOpen((o) => !o));
 
   const all = useMemo(() => state.order.map((id) => state.items[id]), [state.order, state.items]);
   if (!state.hydrated || !session) return <div className="p-6 text-sm text-stone-500">Loading…</div>;
@@ -68,14 +103,15 @@ function DeskInner() {
   const selectedKey = selectedItem ? conversationKey(selectedItem) : null;
   const conversation = visible.find((c) => c.key === selectedKey) ?? visible[0] ?? null;
 
-  // Seniors: a rail of agents on shift with open counts.
-  const team =
-    session.role === "senior"
-      ? ROSTER.filter((s) => s.role === "agent" && (isOnShift(s, now, state.shiftOverrides) || all.some((i) => i.ownerId === s.id && isPending(i)))).map((s) => ({
-          s,
-          open: all.filter((i) => i.ownerId === s.id && isPending(i)).length,
-        }))
-      : [];
+  // Seniors and managers: the agents on shift or holding open items, with counts.
+  const leads = session.role === "senior" || session.role === "manager";
+  const team = leads
+    ? ROSTER.filter((s) => s.role === "agent" && (isOnShift(s, now, state.shiftOverrides) || all.some((i) => i.ownerId === s.id && isPending(i)))).map((s) => ({
+        s,
+        open: all.filter((i) => i.ownerId === s.id && isPending(i)).length,
+      }))
+    : undefined;
+  const myOpen = all.filter((i) => i.ownerId === session.staffId && isPending(i)).length;
 
   const sync = state.mailboxSync;
   const emptyText =
@@ -85,57 +121,56 @@ function DeskInner() {
         ? `The mailbox could not be loaded: ${sync.error ?? "unknown error"}. New mail still appears here within 20 seconds.`
         : all.length === 0 && state.gmail?.configured
           ? `No conversations yet. New mail to ${state.gmail.address} appears here within 20 seconds, sorted and owned.`
-      : view.id === "done"
-        ? "Nothing closed yet."
-        : session.role === "agent"
-          ? "Nothing waiting for you. New conversations assigned to you appear here."
-          : "Nothing in this view.";
+          : view.id === "done"
+            ? "Nothing closed yet."
+            : session.role === "agent"
+              ? "Nothing waiting for you. New conversations assigned to you appear here."
+              : "Nothing in this view.";
 
   return (
     <div className="flex-1 flex min-h-0">
-      {team.length ? (
-        <nav className="w-[180px] shrink-0 border-r border-stone-200 bg-stone-50 flex flex-col min-h-0 text-sm">
-          <div className="px-3 h-11 flex items-center text-[11px] uppercase tracking-wide text-stone-400 border-b border-stone-100">Team</div>
-          <ul className="flex-1 overflow-y-auto scroll-thin py-1">
-            <li>
-              <button onClick={() => setFocus("")} className={`w-full text-left px-3 py-1.5 flex items-center ${focus === "" ? "bg-white font-medium text-stone-900" : "text-stone-600 hover:bg-white/60"}`}>
-                Everyone
-              </button>
-            </li>
-            <li>
-              <button onClick={() => setFocus(session.staffId)} className={`w-full text-left px-3 py-1.5 flex items-center ${focus === session.staffId ? "bg-white font-medium text-stone-900" : "text-stone-600 hover:bg-white/60"}`}>
-                Me
-                <span className="ml-auto text-xs tabular-nums text-stone-400">{all.filter((i) => i.ownerId === session.staffId && isPending(i)).length || ""}</span>
-              </button>
-            </li>
-            {team.map(({ s, open }) => (
-              <li key={s.id}>
-                <button onClick={() => setFocus(s.id)} className={`w-full text-left px-3 py-1.5 flex items-center ${focus === s.id ? "bg-white font-medium text-stone-900" : "text-stone-600 hover:bg-white/60"}`}>
-                  <span className="truncate">{s.name.split(" ")[0]}</span>
-                  <span className={`ml-auto text-xs tabular-nums ${open >= 5 ? "text-rose-700 font-medium" : "text-stone-400"}`}>{open || ""}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      ) : null}
-      <ConversationList
-        conversations={visible}
+      <NavRail
         views={views}
-        view={view}
+        counts={counts}
+        activeId={view.id}
         onView={(v) => {
           setViewId(v.id);
           setComposing(false);
         }}
-        selectedKey={conversation?.key ?? null}
-        onSelect={(c) => {
-          setComposing(false);
-          dispatch({ type: "select", id: (c.open ?? c.latest).message.id });
-        }}
-        counts={counts}
-        emptyText={emptyText}
-        onCompose={session.role === "manager" || session.role === "senior" ? () => setComposing(true) : undefined}
-        newSince={newSince}
+        team={team}
+        me={session.staffId}
+        myOpen={myOpen}
+        focus={focus}
+        onFocus={setFocus}
+        collapsed={railCollapsed}
+        onToggle={() => setPref({ railCollapsed: !railCollapsed })}
+      />
+      <div style={{ width: listWidth }} className="shrink-0 flex min-h-0">
+        <ConversationList
+          conversations={visible}
+          title={view.label}
+          count={counts[view.id]}
+          selectedKey={conversation?.key ?? null}
+          onSelect={(c) => {
+            setComposing(false);
+            dispatch({ type: "select", id: (c.open ?? c.latest).message.id });
+          }}
+          emptyText={emptyText}
+          onCompose={leads ? () => setComposing(true) : undefined}
+          newSince={newSince}
+        />
+      </div>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the conversation list"
+        title="Drag to resize the list. Double-click to reset."
+        onPointerDown={onHandleDown}
+        onPointerMove={onHandleMove}
+        onPointerUp={onHandleUp}
+        onPointerCancel={onHandleUp}
+        onDoubleClick={() => setPref({ listWidth: LIST_DEFAULT })}
+        className={`w-1.5 -ml-[3px] shrink-0 z-10 cursor-col-resize transition-colors ${dragWidth !== null ? "bg-brand/40" : "bg-transparent hover:bg-brand/30"}`}
       />
       {composing ? (
         <div className="flex-1 min-w-0 overflow-y-auto scroll-thin">
@@ -145,14 +180,15 @@ function DeskInner() {
         </div>
       ) : conversation ? (
         <>
-          <Thread key={conversation.key} conversation={conversation} />
-          <ContextPanel conversation={conversation} />
+          <Thread key={conversation.key} conversation={conversation} detailsShown={detailsShown} onToggleDetails={toggleDetails} />
+          {isWide && detailsShown ? <ContextPanel conversation={conversation} variant="inline" /> : null}
+          {!isWide && sheetOpen ? <ContextPanel conversation={conversation} variant="sheet" onClose={() => setSheetOpen(false)} /> : null}
         </>
       ) : (
         <div className="flex-1 grid place-items-center p-8 text-sm text-stone-500 text-center max-w-none">
           <div className="max-w-sm leading-relaxed">
             {emptyText}
-            {session.role === "manager" || session.role === "senior" ? (
+            {leads ? (
               <div className="mt-3">
                 <button onClick={() => setComposing(true)} className="text-brand underline">
                   Simulate a message

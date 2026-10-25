@@ -1,5 +1,18 @@
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import type { Channel } from "@/lib/agent/schema";
+
+// True when the viewport matches, kept in sync with the window. Wide on the server.
+export function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const m = window.matchMedia(query);
+      m.addEventListener("change", onChange);
+      return () => m.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(query).matches,
+    () => true,
+  );
+}
 
 export function Badge({ children, tone = "stone", title }: { children: ReactNode; tone?: "stone" | "green" | "amber" | "rose" | "blue" | "brand"; title?: string }) {
   const tones = {

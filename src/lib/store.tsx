@@ -116,6 +116,14 @@ export interface State {
   listSeen: Record<string, { newSince: string | null; awayAt: string | null }>;
   // The automatic load of the whole mailbox into this browser.
   mailboxSync: { status: "idle" | "running" | "done" | "error"; loaded: number; estimate: number; at: string | null; error?: string };
+  // Layout choices, per person: rail collapsed, list width, details panel hidden.
+  prefs: Record<string, Prefs>;
+}
+
+export interface Prefs {
+  railCollapsed?: boolean;
+  listWidth?: number;
+  detailsHidden?: boolean;
 }
 
 export type Action =
@@ -151,13 +159,14 @@ export type Action =
   | { type: "notifications_seen"; staffId: string }
   | { type: "mailbox_sync"; sync: Partial<State["mailboxSync"]> }
   | { type: "followup_dismiss"; id: string }
+  | { type: "set_pref"; staffId: string; pref: Prefs }
   | { type: "list_opened"; staffId: string }
   | { type: "list_left"; staffId: string; at: string }
   | { type: "reset" };
 
 const KEY = "aurel-desk-state-v2";
 
-const EMPTY: State = { items: {}, order: [], traces: [], handoffs: [], bookingUpdates: [], selectedId: null, hydrated: false, rotation: 0, session: null, gmail: null, samples: "none", shiftOverrides: {}, handovers: [], events: [], notificationsSeenAt: {}, listSeen: {}, mailboxSync: { status: "idle", loaded: 0, estimate: 0, at: null } };
+const EMPTY: State = { items: {}, order: [], traces: [], handoffs: [], bookingUpdates: [], selectedId: null, hydrated: false, rotation: 0, session: null, gmail: null, samples: "none", shiftOverrides: {}, handovers: [], events: [], notificationsSeenAt: {}, listSeen: {}, mailboxSync: { status: "idle", loaded: 0, estimate: 0, at: null }, prefs: {} };
 export const EMPTY_STATE: State = { ...EMPTY, hydrated: true };
 
 // The desk starts empty. Sample messages are loaded only in demo mode (no mailbox
@@ -709,6 +718,8 @@ export function reducer(state: State, action: Action): State {
       next = withFollowUps(next, now);
       return withEvents(next, tickEvents(next, now));
     }
+    case "set_pref":
+      return { ...state, prefs: { ...state.prefs, [action.staffId]: { ...state.prefs[action.staffId], ...action.pref } } };
     case "followup_dismiss": {
       const it = state.items[action.id];
       if (!it?.followUp) return state;

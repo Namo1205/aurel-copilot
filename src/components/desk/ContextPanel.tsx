@@ -45,7 +45,7 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-export function ContextPanel({ conversation }: { conversation: Conversation }) {
+export function ContextPanel({ conversation, variant = "inline", onClose }: { conversation: Conversation; variant?: "inline" | "sheet"; onClose?: () => void }) {
   const { state, dispatch } = useStore();
   const session = state.session;
   const [showLookups, setShowLookups] = useState(false);
@@ -65,7 +65,22 @@ export function ContextPanel({ conversation }: { conversation: Conversation }) {
   const room = booking ? hotel?.roomTypes.find((r) => r.code === (updated?.roomType ?? booking.roomType))?.name : undefined;
 
   return (
-    <aside className="w-[300px] shrink-0 border-l border-stone-200 bg-white overflow-y-auto scroll-thin hidden xl:block text-sm">
+    <aside
+      aria-label="Booking and actions"
+      className={
+        variant === "sheet"
+          ? "fixed inset-y-0 right-0 w-[340px] max-w-[90vw] z-30 bg-white border-l border-stone-200 shadow-2xl overflow-y-auto scroll-thin text-sm"
+          : "w-[300px] shrink-0 border-l border-stone-200 bg-white overflow-y-auto scroll-thin text-sm"
+      }
+    >
+      {variant === "sheet" ? (
+        <div className="px-4 h-12 flex items-center border-b border-stone-100 sticky top-0 bg-white">
+          <span className="text-sm font-semibold">Details</span>
+          <button onClick={onClose} aria-label="Close details" className="ml-auto h-7 w-7 grid place-items-center rounded-md text-stone-500 hover:bg-stone-100 hover:text-stone-900 text-lg leading-none">
+            ×
+          </button>
+        </div>
+      ) : null}
       <Block title="Booking">
         {booking && hotel && checkIn && checkOut ? (
           <div className="space-y-0.5">

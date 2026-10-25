@@ -136,7 +136,7 @@ function Exchange({ item }: { item: InboxItem }) {
   );
 }
 
-export function Thread({ conversation }: { conversation: Conversation }) {
+export function Thread({ conversation, detailsShown, onToggleDetails }: { conversation: Conversation; detailsShown: boolean; onToggleDetails: () => void }) {
   const { state, dispatch } = useStore();
   const session = state.session;
   const [busy, setBusy] = useState(false);
@@ -330,6 +330,18 @@ export function Thread({ conversation }: { conversation: Conversation }) {
             </div>
           )}
         </div>
+        <button
+          onClick={onToggleDetails}
+          aria-pressed={detailsShown}
+          aria-label={detailsShown ? "Hide booking and actions" : "Show booking and actions"}
+          title={detailsShown ? "Hide the details panel" : "Show the booking and the actions"}
+          className={`h-8 w-8 shrink-0 grid place-items-center rounded-md transition ${detailsShown ? "bg-stone-100 text-stone-900" : "text-stone-500 hover:bg-stone-100 hover:text-stone-900"}`}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M15 4v16" />
+          </svg>
+        </button>
       </header>
 
       {/* Thread */}
@@ -510,7 +522,6 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               </Button>
               {m.gmail ? <AttachmentPicker files={files} onChange={onFiles} disabled={busy} /> : null}
               {dropHint}
-              <span className="ml-auto text-[11px] text-stone-400 xl:hidden">Booking and actions show at wider widths.</span>
             </div>
             {gapLine(gaps)}
             {attachError ? <p className="mt-2 text-xs text-rose-700">{attachError}</p> : null}

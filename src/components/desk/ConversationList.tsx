@@ -7,27 +7,25 @@ import { CATEGORY_LABEL } from "@/lib/agent/schema";
 import { getHotel } from "@/lib/pms";
 import { redactCards } from "@/lib/agent/rules";
 import { ASSISTANT_NAME, ownerName } from "@/lib/desk/roster";
-import type { Conversation, View } from "@/lib/desk/visibility";
+import type { Conversation } from "@/lib/desk/visibility";
+import { PaperclipIcon } from "@/components/desk/Attachments";
 
 export function ConversationList({
   conversations,
-  views,
-  view,
-  onView,
+  title,
+  count,
   selectedKey,
   onSelect,
-  counts,
   emptyText,
   onCompose,
   newSince,
 }: {
   conversations: Conversation[];
-  views: View[];
-  view: View;
-  onView: (v: View) => void;
+  // The active view, chosen in the navigation rail.
+  title: string;
+  count?: number;
   selectedKey: string | null;
   onSelect: (c: Conversation) => void;
-  counts: Record<string, number>;
   emptyText: string;
   onCompose?: () => void;
   // ISO time the person last looked at the list; open conversations received after it get a divider.
@@ -46,18 +44,10 @@ export function ConversationList({
   }, []);
 
   return (
-    <aside className="w-[320px] shrink-0 border-r border-stone-200 bg-white flex flex-col min-h-0">
-      <div className="px-2 min-h-11 py-1 border-b border-stone-100 flex flex-wrap items-center gap-x-0.5">
-        {views.map((v) => {
-          const on = v.id === view.id;
-          return (
-            <button key={v.id} onClick={() => onView(v)} className={`relative px-2 h-9 text-[13px] whitespace-nowrap transition ${on ? "text-stone-900 font-medium" : "text-stone-500 hover:text-stone-800"}`}>
-              {v.label}
-              {counts[v.id] ? <span className={`ml-1 text-xs tabular-nums ${on ? "text-stone-500" : "text-stone-400"}`}>{counts[v.id]}</span> : null}
-              {on ? <span className="absolute left-2 right-2 -bottom-px h-0.5 bg-brand rounded-full" /> : null}
-            </button>
-          );
-        })}
+    <aside className="w-full min-w-0 border-r border-stone-200 bg-white flex flex-col min-h-0">
+      <div className="px-4 h-11 border-b border-stone-100 flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-stone-900 truncate">{title}</h2>
+        {count ? <span className="text-xs tabular-nums text-stone-400">{count}</span> : null}
         {onCompose ? (
           <button onClick={onCompose} className="ml-auto h-7 w-7 grid place-items-center rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-900 text-lg leading-none" title="Add a simulated inbound email">
             +
@@ -123,7 +113,11 @@ export function ConversationList({
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-stone-500">
                     <span className="truncate">{meta || (isPending(it) ? "Sorting…" : "")}</span>
                     {p?.sensitiveData.present ? <span className="shrink-0 text-rose-700">· Sensitive</span> : null}
-                    {m.attachments?.length ? <span className="shrink-0 text-stone-400" title={m.attachments.map((a) => a.name).join(", ")}>· 📎 {m.attachments.length}</span> : null}
+                    {m.attachments?.length ? (
+                      <span className="shrink-0 text-stone-400 inline-flex items-center gap-0.5" title={m.attachments.map((a) => a.name).join(", ")}>
+                        · <PaperclipIcon /> {m.attachments.length}
+                      </span>
+                    ) : null}
                     {it.status === "analyzing" || it.status === "new" ? <span className="ml-auto shrink-0 text-stone-400">Sorting…</span> : null}
                     {waiting && it.autoSentAt ? <span className="ml-auto shrink-0 text-amber-700">Needs decision</span> : null}
                     {!waiting && it.followUp && !it.followUp.sentAt && !it.followUp.dismissedAt ? <span className="ml-auto shrink-0 text-amber-700">Follow-up suggested</span> : null}
