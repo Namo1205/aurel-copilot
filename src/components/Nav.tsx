@@ -70,7 +70,7 @@ export function Nav() {
             {tab("/", "Desk", pending)}
             {tab("/dashboard", "Dashboard")}
             {tab("/ops", "PMS traces", openTraces)}
-            {tab("/about", "How it works")}
+            {tab("/about", "Help")}
           </nav>
         ) : null}
         <div className="ml-auto flex items-center gap-4 text-sm">

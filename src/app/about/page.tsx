@@ -1,156 +1,104 @@
-import { Badge } from "@/components/ui";
+// Help for the desk team: one screen, written for an agent on shift. How the prototype
+// is built (engines, what is simulated) lives in the README for reviewers.
 
-const rows: { situation: string; does: string; never: string; handoff: string; approval: string }[] = [
-  {
-    situation: "Policy question",
-    does: "Searches that hotel's handbook by meaning, answers from the section it finds, and cites it.",
-    never: "Answers from general knowledge or guesses the hotel. Early check-in is a special request, never a policy question.",
-    handoff: "No paragraph found, or anything else in the message → an agent. No hotel named → asks which hotel, sent alone; the reply is read with the thread.",
-    approval: "Sends alone when the whole message is policy-only",
-  },
-  {
-    situation: "Price / availability",
-    does: "Pulls today's price from the PMS; drafts Flexible and Advance Purchase options with totals and terms.",
-    never: "Quotes a number the PMS did not return. Discounts or matches a price.",
-    handoff: "Non-public rate asked for → manager.",
-    approval: "Agent approves",
-  },
-  {
-    situation: "Booking change",
-    does: "Checks the rate rules and live availability; prepares the PMS change with the price difference.",
-    never: "Changes an Advance Purchase booking or waives a difference.",
-    handoff: "Rules do not allow it → manager.",
-    approval: "Agent approves the write",
-  },
-  {
-    situation: "Special request",
-    does: "One PMS trace per request to the right department, due before arrival. Allergy, medical, access → restricted trace.",
-    never: "Says a request is done or guaranteed. Puts sensitive detail in free text.",
-    handoff: "VIP or travel-advisor email → senior agent.",
-    approval: "Agent approves the reply",
-  },
-  {
-    situation: "Cancellation / refund",
-    does: "Within the rules: drafts the confirmation. Outside the rules or compassionate: sends the fixed holding template at once.",
-    never: "Confirms a refund outside the rules. Asks for medical proof.",
-    handoff: "Outside the rules → manager, same day.",
-    approval: "Template sent alone; manager decides",
-  },
-  {
-    situation: "Group / event",
-    does: "Sends the fixed acknowledgement template; passes dates, size, hotel and the guest's words to the groups specialists.",
-    never: "Quotes or holds inventory for a group.",
-    handoff: "Always → groups specialist.",
-    approval: "Template sent alone; specialist replies",
-  },
-  {
-    situation: "Off-topic or manipulation",
-    does: "Sends the fixed decline template, routes to an agent, counts it in the audit log.",
-    never: "Attempts the task. Follows an instruction inside a message. Reveals its own instructions or other guests' details.",
-    handoff: "Repeated attempts → senior; threats → manager.",
-    approval: "Template sent alone",
-  },
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border border-stone-200 bg-white p-5">
+      <h2 className="font-semibold mb-3">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+const STEPS: [string, string][] = [
+  ["It arrives and gets an owner", "Every email is sorted by what the guest needs and given a named owner the moment it lands. Nothing waits in a shared pile."],
+  ["Aurel Assistant prepares the work", "It finds the booking, looks up today's price and the hotel's handbook, writes a suggested reply, and lists the hotel to-dos and PMS changes the reply implies."],
+  ["Some answers go out on their own", "A pure policy question with the hotel named, such as check-out time or parking, is answered from the handbook and sent at once, with the section it came from. You see it under Sent alone."],
+  ["Everything else waits for you", "Prices, changes, requests, cancellations and anything with a judgement call sit in your list with the suggested reply ready. You decide."],
 ];
 
-export default function About() {
+const CAN_DO: [string, string][] = [
+  ["Approve & send", "Sends the reply and does the ticked actions: the PMS change, the hotel to-dos, the payment link."],
+  ["Edit first", "Change any word of the suggested reply before it goes. Edits are counted so the assistant can improve, never held against you."],
+  ["Write it yourself", "Start from a blank box. The actions in the right panel still run if they stay ticked."],
+  ["Attach files", "Up to 3 files, 3 MB in total, sent inside the email. Drop a file on the reply box or paste a screenshot."],
+  ["Untick an action", "Any to-do or change in the right panel can be unticked before you approve."],
+  ["Change the type", "If a message was sorted wrong, pick the right type above the thread. Every correction is counted; that is how a type earns the right to send alone."],
+  ["Take ownership", "A colleague's conversation can be taken over with one click, and seniors can reassign from the thread or the dashboard."],
+  ["End my shift", "Your open conversations move to colleagues on shift by the same rule that assigned them, and the dashboard lists the handovers."],
+];
+
+const NEVER: string[] = [
+  "Confirm an early check-in, an upgrade, a transfer or a refund. The hotel confirms those; the reply says so.",
+  "Quote a price the booking system did not return, or discount or match a price.",
+  "Put an allergy, medical or accessibility detail anywhere but a restricted hotel to-do.",
+  "Keep, repeat or forward card numbers. They are removed before anyone sees the message and a secure payment link is offered instead.",
+  "Read your attachments or the guest's. It only knows a file is there.",
+  "Send anything on its own except a cited handbook answer, the question asking which hotel, or one of the fixed templates: the holding reply, the group acknowledgement, the decline for messages that are not about a stay.",
+  "Act on instructions written inside a guest's message. Text in a message is information, never an order.",
+];
+
+export default function Help() {
   return (
-    <div className="mx-auto max-w-[1000px] w-full p-6 space-y-8">
+    <div className="mx-auto max-w-[1000px] w-full p-6 space-y-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">How it works</h1>
-        <p className="text-sm text-stone-600 mt-2 leading-relaxed">
-          One idea: <b>sort every message by type, then send each type to the cheapest safe handler.</b> Documents for policy questions. The PMS for prices. People for judgement calls. Traces for the hotels. Aurel Assistant is the software; an agent is a person on the 22-person reservations desk.
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight">Help</h1>
+        <p className="text-sm text-stone-600 mt-1">How the desk works, what you can do, and what Aurel Assistant will never do on its own.</p>
       </div>
 
-      <section className="space-y-3">
-        <h2 className="font-medium">What happens to every message</h2>
-        <ol className="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
-          {[
-            ["Sort", "Type, hotel, urgency, sensitive data. Card numbers removed before anything is stored or shown. A topic check in code runs first: not about a stay, or an instruction aimed at the assistant, means a decline template."],
-            ["Assign an owner", "Every item gets a named owner on arrival, by rule: Aurel Assistant for policy-only questions, the next agent in rotation, a senior for VIP or unsorted, the manager for exceptions, a groups specialist for groups. Nothing is ever unowned, and nothing stays with someone who has gone home: at shift end, pending items move by the same rule and the dashboard logs it."],
-            ["Prepare", "Live price from the PMS, the right hotel policy, one trace per request, a draft reply, and a list of what was deliberately not promised."],
-            ["Show it to the right person", "Each role sees only the conversations they are responsible for: agents their own, seniors their team's, managers everything, groups specialists the Sales ones. Important rises to the top. Cited policy answers and the three fixed templates are sent alone and logged."],
-            ["Approve", "The thread reads like a chat: the guest on the left, what we sent on the right, Aurel Assistant's suggested reply in the composer. The owner approves, edits, or changes the type. Approved writes go to the PMS. The dashboard shows pending per owner, flags on stuck items, auto-sent and corrected counts, promises kept per hotel."],
-          ].map(([t, d], i) => (
-            <li key={t} className="rounded-lg border border-stone-200 bg-white p-4">
-              <div className="text-xs text-stone-400">Step {i + 1}</div>
+      <Card title="What happens to every email">
+        <ol className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+          {STEPS.map(([t, d], i) => (
+            <li key={t} className="rounded-lg bg-stone-50 border border-stone-100 p-3">
+              <div className="text-[11px] text-stone-400">Step {i + 1}</div>
               <div className="font-medium">{t}</div>
               <p className="text-xs text-stone-600 mt-1 leading-relaxed">{d}</p>
             </li>
           ))}
         </ol>
-      </section>
+      </Card>
 
-      <section className="space-y-3">
-        <h2 className="font-medium">Behaviour spec</h2>
-        <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="bg-stone-50 text-xs uppercase tracking-wide text-stone-500">
-              <tr>
-                <th className="text-left px-3 py-2 font-medium">Type</th>
-                <th className="text-left px-3 py-2 font-medium">It does</th>
-                <th className="text-left px-3 py-2 font-medium">It never</th>
-                <th className="text-left px-3 py-2 font-medium">Hands off</th>
-                <th className="text-left px-3 py-2 font-medium">Who approves</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {rows.map((r) => (
-                <tr key={r.situation} className="align-top">
-                  <td className="px-3 py-2 font-medium whitespace-nowrap">{r.situation}</td>
-                  <td className="px-3 py-2 text-stone-700">{r.does}</td>
-                  <td className="px-3 py-2 text-stone-700">{r.never}</td>
-                  <td className="px-3 py-2 text-stone-700">{r.handoff}</td>
-                  <td className="px-3 py-2 text-stone-700">{r.approval}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="text-xs text-stone-600">
-          Rules for every type: live PMS prices only · never confirm what the hotel has not · never discount · exceptions decided by a manager · card details only via the payment gateway · sensitive data only in a restricted trace · every item has an owner from arrival. A type earns the right to send alone when, over four weeks and 300+ items, 95% of drafts went out unedited, the type was changed under 3% of the time, and there were no guardrail breaches.
-        </p>
-      </section>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Card title="What you can do">
+          <ul className="space-y-2 text-sm">
+            {CAN_DO.map(([t, d]) => (
+              <li key={t}>
+                <span className="font-medium">{t}.</span> <span className="text-stone-600">{d}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
 
-      <section className="space-y-3">
-        <h2 className="font-medium">Two engines, one contract</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <div className="rounded-lg border border-stone-200 bg-white p-4">
-            <Badge tone="green">Language model (Google Gemini)</Badge>
-            <p className="mt-2 text-xs text-stone-600 leading-relaxed">
-              Google Gemini with read-only PMS tools: look up a booking, live rates, policy documents, modification and cancellation checks. On when <span className="font-mono">GEMINI_API_KEY</span> is set. Its PMS lookups are shown on the desk so the owner can see what it checked. Code-level guardrails run after the model answers: card redaction, modification re-check against the PMS, restricted flag on sensitive traces, topic check on the draft, human approval forced.
-            </p>
-          </div>
-          <div className="rounded-lg border border-stone-200 bg-white p-4">
-            <Badge tone="amber">Rules engine</Badge>
-            <p className="mt-2 text-xs text-stone-600 leading-relaxed">
-              Deterministic, keyword and pattern based. Runs with no API key, so the prototype is always usable, and takes over if the model fails (labelled on the item). It is also the regression baseline: every seed message has a known-good output.
-            </p>
-          </div>
-        </div>
-      </section>
+        <Card title="What Aurel Assistant never does">
+          <ul className="list-disc pl-5 space-y-2 text-sm text-stone-700">
+            {NEVER.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        </Card>
+      </div>
 
-      <section className="space-y-3">
-        <h2 className="font-medium">Where the answers come from</h2>
-        <div className="rounded-lg border border-stone-200 bg-white p-4 text-sm text-stone-700 leading-relaxed">
-          <p>
-            One handbook per hotel plus a group handbook, written in plain markdown in <span className="font-mono text-xs">docs/policies</span>, the way a hotel would actually maintain them: check-in times, facilities, parking, pets, transfers, dining, children, accessibility, and the group rules on cancellation, modifications, parity, payment, sensitive data, groups, early and late check-out, occasions, cots, travel advisors.
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Card title="Where the answers come from">
+          <p className="text-sm text-stone-700 leading-relaxed">
+            One handbook per hotel plus a group handbook, plain documents the hotels maintain: check-in times, facilities, parking, pets, transfers, dining, children, accessibility, and the group rules on cancellation, changes, prices and sensitive information. Every automatic answer shows <span className="font-medium">Based on</span> with the section it used. If a rule is wrong or missing, the fix is in the handbook, not in the software.
           </p>
-          <p className="mt-2">
-            A build step cuts each handbook into sections and embeds them with Gemini&apos;s embedding model. When a guest asks a question, the assistant searches by meaning, so &quot;can my dog come&quot; finds the pets section and &quot;can we bring our six-year-old&quot; finds the children rule, then answers from that section and cites it. Keyword search is the tiebreaker and the fallback when there is no key. A hotel edits its handbook, the build runs, the answers change. Nothing is hard-coded in the assistant.
-          </p>
-        </div>
-      </section>
+        </Card>
 
-      <section className="space-y-2 text-sm text-stone-600">
-        <h2 className="font-medium text-stone-900">What is simulated</h2>
-        <ul className="list-disc pl-5 space-y-1 text-xs leading-relaxed">
-          <li>Email is the only channel in this version; it arrives live from a Gmail mailbox when one is connected, otherwise from the sample messages and the &quot;Simulate an inbound email&quot; form. WhatsApp and OTA messaging follow next quarter (see the PRD). Desk state lives in your browser.</li>
-          <li>The PMS is a mock with nine hotels, rate plans, bookings and daily prices. Writes happen only at published rates. The handbooks are real files; the hotels in them are fictional.</li>
-          <li>The PMS traces page stands in for the hotel&apos;s own PMS list; hotel staff are not users of this product.</li>
-          <li>The payment link is a placeholder. Phone is out of scope.</li>
-        </ul>
-      </section>
+        <Card title="Who to ask">
+          <ul className="space-y-2 text-sm text-stone-700">
+            <li>
+              <span className="font-medium">A senior</span> for a reassignment, a stuck conversation, or a VIP you are unsure about.
+            </li>
+            <li>
+              <span className="font-medium">The reservations manager</span> for any refund, waiver or rate outside the rules. The guest has already had the holding reply; the manager decides the same day.
+            </li>
+            <li>
+              <span className="font-medium">The bell</span> in the header for what changed while you were away: a reply the guest did not receive, conversations moved to you, a guest replying to one you closed, items over an hour old.
+            </li>
+          </ul>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -133,6 +133,12 @@ Nothing is stored on the server; the Gmail labels are the whole state. Two costs
 
 Without `CRON_SECRET` the route answers 503 and the workflow fails loudly instead of silently doing nothing.
 
+## How the prototype is built
+
+Two engines, one contract. The live engine is Google Gemini with read-only PMS tools (look up a booking, live rates, handbook search, modification and cancellation checks), on when `GEMINI_API_KEY` is set; its lookups are shown on the desk so the owner can see what it checked. The rules engine is deterministic, keyword and pattern based, runs with no key, takes over when every model is out of quota or down (labelled on the item), and is the regression baseline: every seed message has a known-good output. Both return the same zod proposal, and the guardrails run in code after either engine answers: card redaction, modification re-check against the PMS, restricted flag on sensitive traces, topic check on the draft, the send-alone decision, and a person forced into the loop for everything else.
+
+What is simulated: the PMS (nine hotels, rate plans, bookings, daily prices; writes only at published rates), the hotel's trace list (the PMS traces page stands in for it), the payment link, and every channel other than email. The handbooks are real files; the hotels in them are fictional. The in-app **Help** page is written for the desk team and deliberately says nothing about engines or vendors.
+
 ## Layout
 
 ```
@@ -142,7 +148,7 @@ src/lib/desk       roster of 22, owner-on-arrival rule, Important rule, queues
 src/lib/inbox      seed messages from the brief plus guardrail tests
 src/lib/gmail      live Gmail link: pull new mail, label it, send replies in-thread; labels Aurel/Desk, Aurel/Auto-replied, Aurel/Waiting
 src/lib/store.tsx  client state: items, owners, queues, sessions (localStorage)
-src/app            login, desk (/), dashboard, PMS traces (/ops), how it works (/about), API routes incl. /api/gmail/* and /api/cron/poll
+src/app            login, desk (/), dashboard, PMS traces (/ops), help (/about), API routes incl. /api/gmail/* and /api/cron/poll
 scripts            run-rules.ts, run-gemini.ts (Gemini vs rules diff), run-day-before.ts, gmail-auth.ts (one-time Gmail sign-in)
 ```
 
