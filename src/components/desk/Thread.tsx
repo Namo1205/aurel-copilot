@@ -10,7 +10,7 @@ import type { AnalysisResult } from "@/lib/agent";
 import type { ExecutionResult } from "@/lib/agent/execute";
 import { ASSISTANT_NAME, CATEGORY_ORDER, ROSTER, isOnShift, ownerName } from "@/lib/desk/roster";
 import type { Conversation } from "@/lib/desk/visibility";
-import { AttachmentPicker, InboundAttachments, PaperclipIcon, encodeFiles } from "@/components/desk/Attachments";
+import { AttachmentPicker, InboundAttachments, PaperclipIcon, encodeFiles, useAttachDrop } from "@/components/desk/Attachments";
 import { draftGaps } from "@/lib/agent/templates";
 
 export function ago(iso: string): string {
@@ -149,6 +149,12 @@ export function Thread({ conversation }: { conversation: Conversation }) {
     setFiles(next);
     setAttachError(error);
   };
+  const open = conversation.open;
+  const head = open ?? conversation.latest;
+  const m = head.message;
+  const { dragging, handlers: dropHandlers } = useAttachDrop(!!m.gmail, files, onFiles);
+  const boxClass = `w-full rounded-xl border px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30 ${dragging ? "border-brand ring-2 ring-brand/40 bg-brand-soft/30" : "border-stone-300"}`;
+  const dropHint = m.gmail ? <span className="text-[11px] text-stone-400">or drop a file on the box, or paste a screenshot</span> : null;
   const [replyMode, setReplyMode] = useState<"ai" | "manual">("ai");
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -193,9 +199,6 @@ export function Thread({ conversation }: { conversation: Conversation }) {
       setBusy(false);
     }
   };
-  const open = conversation.open;
-  const head = open ?? conversation.latest;
-  const m = head.message;
   const p = head.analysis?.proposal;
   const id = head.message.id;
   const canOverride = session?.role === "senior" || session?.role === "manager";
@@ -369,13 +372,15 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               onChange={(e) => setManualText(e.target.value)}
               rows={3}
               placeholder={`Write to ${m.fromName}…`}
-              className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
+              className={boxClass}
+              {...dropHandlers}
             />
             <div className="flex items-center gap-2 flex-wrap">
               <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim() || manualGaps.length > 0}>
                 {busy ? "Sending…" : "Send"}
               </Button>
               {m.gmail ? <AttachmentPicker files={files} onChange={onFiles} disabled={busy} /> : null}
+              {dropHint}
             </div>
             {gapLine(manualGaps)}
             {attachError ? <p className="text-xs text-rose-700">{attachError}</p> : null}
@@ -390,13 +395,15 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               onChange={(e) => setManualText(e.target.value)}
               rows={4}
               placeholder={`Write your reply to ${m.fromName}…`}
-              className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
+              className={boxClass}
+              {...dropHandlers}
             />
             <div className="flex items-center gap-2 flex-wrap">
               <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim() || manualGaps.length > 0}>
                 {busy ? "Sending…" : "Send"}
               </Button>
               {m.gmail ? <AttachmentPicker files={files} onChange={onFiles} disabled={busy} /> : null}
+              {dropHint}
             </div>
             {gapLine(manualGaps)}
             {attachError ? <p className="text-xs text-rose-700">{attachError}</p> : null}
@@ -463,7 +470,8 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               onChange={(e) => dispatch({ type: "set_draft", id, draft: e.target.value })}
               rows={Math.min(10, Math.max(3, (open.draft ?? (replyMode === "manual" ? "" : p.draftReply)).split("\n").length))}
               placeholder={replyMode === "manual" ? `Write your reply to ${m.fromName}…` : "Edit the suggested reply…"}
-              className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
+              className={boxClass}
+              {...dropHandlers}
             />
             <div className="mt-2 flex items-center gap-2 flex-wrap">
               <Button
@@ -483,6 +491,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
                 {handoff ? "Hand off without replying" : p.actions.length ? "Do the actions, no reply" : "Close without replying"}
               </Button>
               {m.gmail ? <AttachmentPicker files={files} onChange={onFiles} disabled={busy} /> : null}
+              {dropHint}
               <span className="ml-auto text-[11px] text-stone-400 xl:hidden">Booking and actions show at wider widths.</span>
             </div>
             {gapLine(gaps)}

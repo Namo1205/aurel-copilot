@@ -3,7 +3,7 @@
 // Files on a reply. Picked in the browser, sent once inside the email, never kept in
 // browser storage: the thread records only names and sizes.
 
-import { useRef } from "react";
+import { useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import type { InboundMessage } from "@/lib/inbox/seed";
 
 export const MAX_FILES = 3;
@@ -36,15 +36,69 @@ export async function encodeFiles(files: File[]): Promise<OutgoingAttachment[]> 
   );
 }
 
+// The limits, applied to what is already picked plus what is being added. Same rule for
+// the button, a dropped file and a pasted screenshot.
+export function acceptFiles(current: File[], incoming: File[]): { files: File[]; error: string | null } {
+  if (!incoming.length) return { files: current, error: null };
+  const next = [...current, ...incoming];
+  if (next.length > MAX_FILES) return { files: current, error: `Up to ${MAX_FILES} files on one reply.` };
+  const total = next.reduce((s, f) => s + f.size, 0);
+  if (total > MAX_TOTAL_BYTES) return { files: current, error: `Attachments are limited to ${fmtSize(MAX_TOTAL_BYTES)} in total on this prototype.` };
+  return { files: next, error: null };
+}
+
+// Files on the clipboard. A pasted image arrives as "image.png"; give it a name the guest
+// can make sense of.
+export function filesFromClipboard(data: DataTransfer | null): File[] {
+  if (!data?.files?.length) return [];
+  return Array.from(data.files).map((f) => {
+    if (!/^image\.\w+$/i.test(f.name) || !f.type.startsWith("image/")) return f;
+    const now = new Date();
+    const stamp = `${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    const ext = f.type.split("/")[1]?.replace("jpeg", "jpg") || "png";
+    return new File([f], `screenshot-${stamp}.${ext}`, { type: f.type });
+  });
+}
+
+// Drop a file on the reply box, or paste a screenshot into it. Pasting text is untouched.
+export function useAttachDrop(enabled: boolean, files: File[], onChange: (files: File[], error: string | null) => void) {
+  const [dragging, setDragging] = useState(false);
+  const take = (incoming: File[]) => {
+    const r = acceptFiles(files, incoming);
+    onChange(r.files, r.error);
+  };
+  const handlers = enabled
+    ? {
+        onDragOver: (e: DragEvent) => {
+          if (e.dataTransfer.types.includes("Files")) {
+            e.preventDefault();
+            setDragging(true);
+          }
+        },
+        onDragLeave: () => setDragging(false),
+        onDrop: (e: DragEvent) => {
+          if (!e.dataTransfer.files.length) return;
+          e.preventDefault();
+          setDragging(false);
+          take(Array.from(e.dataTransfer.files));
+        },
+        onPaste: (e: ClipboardEvent) => {
+          const picked = filesFromClipboard(e.clipboardData);
+          if (!picked.length) return;
+          e.preventDefault();
+          take(picked);
+        },
+      }
+    : {};
+  return { dragging: enabled && dragging, handlers };
+}
+
 export function AttachmentPicker({ files, onChange, disabled }: { files: File[]; onChange: (files: File[], error: string | null) => void; disabled?: boolean }) {
   const input = useRef<HTMLInputElement>(null);
   const add = (picked: FileList | null) => {
     if (!picked) return;
-    const next = [...files, ...Array.from(picked)].slice(0, MAX_FILES + 1);
-    if (next.length > MAX_FILES) return onChange(files, `Up to ${MAX_FILES} files on one reply.`);
-    const total = next.reduce((s, f) => s + f.size, 0);
-    if (total > MAX_TOTAL_BYTES) return onChange(files, `Attachments are limited to ${fmtSize(MAX_TOTAL_BYTES)} in total on this prototype.`);
-    onChange(next, null);
+    const r = acceptFiles(files, Array.from(picked));
+    onChange(r.files, r.error);
   };
   return (
     <span className="flex items-center gap-1.5 flex-wrap">
