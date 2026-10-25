@@ -6,7 +6,7 @@
 # (see README, "Replies with no desk tab open"); this workflow is a free extra.
 #
 # Repository secrets needed (Settings -> Secrets and variables -> Actions):
-#   DESK_URL     e.g. https://aurel-copilot.vercel.app   (no trailing slash)
+#   DESK_URL     e.g. https://aurel-copilot-eosin.vercel.app   (no trailing slash)
 #   CRON_SECRET  the same value as the CRON_SECRET environment variable on Vercel
 #
 # GitHub runs schedules on the default branch only and pauses them on public
