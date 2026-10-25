@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useStore, type Session } from "@/lib/store";
+import { isSample, useStore, type Session } from "@/lib/store";
+import { restoreFromMailbox } from "@/lib/desk/restore";
 import { ROLE_LABEL, ROSTER, isOnShift, type Role } from "@/lib/desk/roster";
 import { Button } from "@/components/ui";
 
@@ -34,6 +35,23 @@ function LoginForm() {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const samplesOnDesk = state.order.some(isSample);
+  const realOnDesk = state.order.some((id) => !isSample(id));
+
+  const reload = async () => {
+    if (!state.session) {
+      setNote("Sign in first; the mailbox is read with your session.");
+      return;
+    }
+    setNote("Reading the mailbox…");
+    try {
+      const r = await restoreFromMailbox(dispatch);
+      setNote(`Reloaded the last ${r.days} days: ${r.closed} answered conversation${r.closed === 1 ? "" : "s"} restored, ${r.reopened} reopened for sorting.`);
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   // The server sets the session cookie the API routes check; the browser keeps a copy for display.
   const signIn = async (id: string, password?: string): Promise<boolean> => {
@@ -145,14 +163,38 @@ function LoginForm() {
         </p>
         <p className="text-[11px] text-stone-500">
           {state.gmail?.configured ? `Live mailbox: ${state.gmail.address ?? "connected"}. ` : "No mailbox connected: the desk shows the sample messages from the brief. "}
-          <button onClick={() => dispatch({ type: "load_samples" })} className="underline hover:text-stone-700">
-            Load the sample messages
-          </button>
-          {" · "}
-          <button onClick={() => dispatch({ type: "reset" })} className="underline hover:text-stone-700">
-            Clear the desk
-          </button>
+          {samplesOnDesk ? (
+            <button onClick={() => dispatch({ type: "clear_samples" })} className="underline hover:text-stone-700" title="Removes only the 13 sample messages. Real mail stays.">
+              Remove the sample messages
+            </button>
+          ) : (
+            <button onClick={() => dispatch({ type: "load_samples" })} className="underline hover:text-stone-700">
+              Load the sample messages
+            </button>
+          )}
+          {state.gmail?.configured ? (
+            <>
+              {" · "}
+              <button onClick={reload} className="underline hover:text-stone-700" title="Rebuilds this browser from the last three days of the mailbox. Answered conversations come back with their replies; unanswered ones are sorted again.">
+                Reload from the mailbox
+              </button>
+            </>
+          ) : null}
+          {process.env.NODE_ENV !== "production" && realOnDesk ? (
+            <>
+              {" · "}
+              <button
+                onClick={() => {
+                  if (window.confirm("Development only: wipe everything this browser knows about the desk, including real conversations? The mailbox is not touched and can be reloaded.")) dispatch({ type: "reset" });
+                }}
+                className="underline hover:text-rose-700"
+              >
+                Reset this browser
+              </button>
+            </>
+          ) : null}
         </p>
+        {note ? <p className="text-[11px] text-stone-600">{note}</p> : null}
       </div>
     </div>
   );

@@ -55,6 +55,8 @@ export const ROSTER: Staff[] = [
 ];
 
 export const AI_OWNER_ID = "ai-agent";
+// A reply read back from the mailbox when the desk was rebuilt; who approved it is not recorded there.
+export const MAILBOX_OWNER_ID = "mailbox";
 export const PENDING_LIMIT = 15;
 
 export type Queue = "auto" | "agent" | "manager" | "sales" | "traces";
@@ -107,6 +109,7 @@ export function staffById(id: string): Staff | undefined {
 export function ownerName(id: string | null): string {
   if (!id) return "Unassigned";
   if (id === AI_OWNER_ID) return "AI agent";
+  if (id === MAILBOX_OWNER_ID) return "The desk, earlier";
   return staffById(id)?.name ?? id;
 }
 

@@ -58,7 +58,9 @@ The desk is a conversation view: the list on the left, the thread in the middle 
 | Manager | Everything, plus the Manager view (exceptions) and the Sent-alone log | Dashboard, then Manager |
 | Groups specialist | Sales conversations only | Open |
 
-With a mailbox connected the desk starts empty and shows only real guest mail. Without one it loads the thirteen sample messages from the brief; they are also one click away on the sign-in page, or at `/?samples=load`.
+With a mailbox connected the desk starts empty and shows only real guest mail. Without one it loads the thirteen sample messages from the brief; they are also one click away on the sign-in page, or at `/?samples=load`. "Remove the sample messages" on the sign-in page takes only the samples off; real mail is never cleared from a production build.
+
+Desk state lives in the browser, so a new browser, or one that was reset, starts empty. **Reload from the mailbox** (sign-in page, or the empty desk) rebuilds it from Gmail: every message the desk took in the last three days comes back, answered ones closed with the reply the desk sent, unanswered ones open and sorted again. The Gmail labels are the source of truth, so nothing a guest sent is lost by clearing a browser.
 
 **Notifications:** the bell in the header carries only what the list cannot show: a reply the guest did not receive, conversations moved to you by a senior or at a shift end, a guest replying to a conversation you closed, items in your queue over an hour old, and your shift ending with work open. Seniors and managers also see agents with several overdue items, manager-queue arrivals and handovers that found nobody. New arrivals are not notifications; the list marks them with a "new since you last looked" line. Read state is per person.
 

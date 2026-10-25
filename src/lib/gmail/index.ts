@@ -216,17 +216,56 @@ export async function pullNewMessages(max = 10): Promise<InboundMessage[]> {
   return list;
 }
 
-// The desk's own latest reply in a thread: what the scheduled check sent, read back
-// from Gmail so the desk can show it without having stored anything.
-export async function ownReplyInThread(threadId: string): Promise<{ body: string; at: string } | null> {
+export interface OwnReply {
+  body: string;
+  at: string;
+}
+
+// Every reply the desk itself sent in a thread, oldest first, read back from Gmail.
+export async function ownRepliesInThread(threadId: string): Promise<OwnReply[]> {
   const me = (await selfAddress()).toLowerCase();
   const t = await gmail<{ messages?: GmailMessage[] }>(`/threads/${threadId}?format=full`);
-  const mine = (t.messages ?? []).filter((m) => header(m.payload, "From").toLowerCase().includes(me));
-  const last = mine[mine.length - 1];
-  if (!last) return null;
-  const plain = findPart(last.payload, "text/plain");
-  const raw = plain?.body?.data ? b64url(plain.body.data) : last.payload.body?.data ? b64url(last.payload.body.data) : "";
-  return { body: raw.trim(), at: new Date(Number(last.internalDate ?? Date.now())).toISOString() };
+  return (t.messages ?? [])
+    .filter((m) => header(m.payload, "From").toLowerCase().includes(me))
+    .map((m) => {
+      const plain = findPart(m.payload, "text/plain");
+      const raw = plain?.body?.data ? b64url(plain.body.data) : m.payload.body?.data ? b64url(m.payload.body.data) : "";
+      return { body: raw.trim(), at: new Date(Number(m.internalDate ?? Date.now())).toISOString() };
+    })
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
+// The desk's latest reply in a thread: what the scheduled check sent.
+export async function ownReplyInThread(threadId: string): Promise<OwnReply | null> {
+  const all = await ownRepliesInThread(threadId);
+  return all[all.length - 1] ?? null;
+}
+
+// Everything the desk has taken from the mailbox in the last `days` days, each with
+// the desk's reply to it where there is one. A fresh or cleared browser rebuilds the
+// desk from this, so clearing local state never loses a guest's message.
+export async function listTakenMessages(days = 3, max = 50): Promise<{ message: InboundMessage; receivedAt: string; reply: OwnReply | null }[]> {
+  const q = `label:${LABELS.desk} newer_than:${days}d`;
+  const list = await gmail<{ messages?: { id: string; threadId: string }[] }>(`/messages?q=${encodeURIComponent(q)}&maxResults=${max}`);
+  const ids = list.messages ?? [];
+  if (!ids.length) return [];
+  const [autoReplied, me] = await Promise.all([labelId(LABELS.autoReplied), selfAddress()]);
+  const repliesByThread = new Map<string, Promise<OwnReply[]>>();
+  const out: { message: InboundMessage; receivedAt: string; reply: OwnReply | null }[] = [];
+  for (const { id, threadId } of ids) {
+    const full = await gmail<GmailMessage>(`/messages/${id}?format=full`);
+    const fromHeader = header(full.payload, "From").toLowerCase();
+    if (fromHeader.includes(me.toLowerCase()) || isSystemSender(fromHeader)) continue;
+    const message = toInbound(full);
+    message.gmail!.autoReplied = (full.labelIds ?? []).includes(autoReplied);
+    const receivedAt = new Date(Number(full.internalDate ?? Date.now())).toISOString();
+    if (!repliesByThread.has(threadId)) repliesByThread.set(threadId, ownRepliesInThread(threadId).catch(() => []));
+    const replies = await repliesByThread.get(threadId)!;
+    // The first reply sent after this message is the one that answered it.
+    const reply = replies.find((r) => Date.parse(r.at) > Date.parse(receivedAt)) ?? null;
+    out.push({ message, receivedAt, reply });
+  }
+  return out.sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt));
 }
 
 const SYSTEM_SENDER = /no-?reply|do-?not-?reply|mailer-daemon|postmaster|@google\.com|@accounts\.google|notification|newsletter/i;

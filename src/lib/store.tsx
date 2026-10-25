@@ -12,7 +12,7 @@ import { CATEGORY_LABEL, type Category } from "@/lib/agent/schema";
 import type { Booking, Trace } from "@/lib/pms";
 import { BOOKINGS, createTrace, getBooking, getGuest, getHotel } from "@/lib/pms";
 import { TEMPLATES } from "@/lib/agent/templates";
-import { AI_OWNER_ID, ROSTER, assignOwner, importantReasons, isOnShift, queueFor, shiftEnded, staffById, type Queue, type Role, type ShiftOverrides } from "@/lib/desk/roster";
+import { AI_OWNER_ID, MAILBOX_OWNER_ID, ROSTER, assignOwner, importantReasons, isOnShift, queueFor, shiftEnded, staffById, type Queue, type Role, type ShiftOverrides } from "@/lib/desk/roster";
 
 export type ItemStatus = "new" | "analyzing" | "drafted" | "sent" | "handed_off" | "auto_sent";
 
@@ -113,10 +113,12 @@ export interface State {
   listSeen: Record<string, { newSince: string | null; awayAt: string | null }>;
 }
 
-type Action =
+export type Action =
   | { type: "hydrate"; state: Partial<State> }
   | { type: "select"; id: string }
   | { type: "add_message"; message: InboundMessage }
+  // A message read back from the mailbox with the reply the desk sent to it.
+  | { type: "restore_message"; message: InboundMessage; receivedAt: string; reply: { body: string; at: string } }
   | { type: "analyzing"; id: string }
   | { type: "analyzed"; id: string; analysis: AnalysisResult }
   | { type: "analyze_failed"; id: string; error: string }
@@ -417,6 +419,48 @@ export function reducer(state: State, action: Action): State {
         },
         replied,
       );
+    }
+    case "restore_message": {
+      if (state.items[action.message.id]) return state;
+      const m = action.message;
+      const auto = !!m.gmail?.autoReplied;
+      const stub: AnalysisResult = {
+        engine: "rules",
+        latencyMs: 0,
+        proposal: {
+          triage: { category: auto ? "pre_arrival_question" : "other", secondaryCategories: [], hotelId: null, urgency: "normal", language: "en", summary: "Restored from the mailbox after the desk was cleared; the original sorting is not kept there." },
+          bookingMatch: { bookingId: m.bookingRef ?? null, confidence: m.bookingRef ? "high" : "none", note: m.bookingRef ? "Reference carried by the message." : "Not re-sorted." },
+          sensitiveData: { present: false, types: [], handling: "Not re-checked; the reply had already gone out." },
+          actions: [],
+          draftReply: action.reply.body,
+          didNotPromise: [],
+          policyCitations: [],
+          confidence: 0,
+          autoSendEligible: false,
+          autoSend: auto ? { kind: "policy_answer", reason: "Sent alone before the desk was rebuilt.", body: action.reply.body } : { kind: "none", reason: "" },
+          requiresHuman: true,
+          requiresHumanReason: "Already answered.",
+        },
+      };
+      const item: InboxItem = {
+        message: m,
+        receivedAt: action.receivedAt,
+        status: auto ? "auto_sent" : "sent",
+        analysis: stub,
+        draft: action.reply.body,
+        approved: [],
+        ownerId: auto ? AI_OWNER_ID : null,
+        ownerRule: "Restored from the mailbox.",
+        queue: auto ? "auto" : "agent",
+        important: [],
+        handledAt: action.reply.at,
+        handledBy: auto ? AI_OWNER_ID : MAILBOX_OWNER_ID,
+        autoSentAt: auto ? action.reply.at : undefined,
+        autoSentBody: auto ? action.reply.body : undefined,
+        delivery: auto ? { via: "gmail", at: action.reply.at } : undefined,
+        result: auto ? undefined : { sentReply: { channel: "email", to: m.from, body: action.reply.body, sentAt: action.reply.at, deliveredVia: "gmail" }, traces: [], bookingUpdates: [], handoffs: [], paymentLinks: [], skipped: [] },
+      };
+      return { ...state, items: { ...state.items, [m.id]: item }, order: [...state.order, m.id] };
     }
     case "delivered": {
       const next = patch(state, action.id, { delivery: action.delivery });
