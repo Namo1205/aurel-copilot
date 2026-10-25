@@ -130,6 +130,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
   const { state, dispatch } = useStore();
   const session = state.session;
   const [busy, setBusy] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [now] = useState(() => new Date());
   const [manualText, setManualText] = useState("");
   const [replyMode, setReplyMode] = useState<"ai" | "manual">("ai");
@@ -205,6 +206,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
   const executeNow = async (sendReply: boolean) => {
     if (!p || !session || !open) return;
     setBusy(true);
+    setSendError(null);
     try {
       const approvedActionIndexes = (open.approved ?? []).map((a, i) => (a ? i : -1)).filter((i) => i >= 0);
       const r = await fetch("/api/execute", {
@@ -212,8 +214,18 @@ export function Thread({ conversation }: { conversation: Conversation }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message: m, proposal: p, approvedActionIndexes, draftReply: open.draft ?? p.draftReply, sendReply }),
       });
+      if (r.status === 401) {
+        dispatch({ type: "logout" });
+        return;
+      }
+      if (!r.ok) {
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `Could not send (${r.status}).`);
+      }
       const result = (await r.json()) as ExecutionResult;
       dispatch({ type: "executed", id, result, status: sendReply ? "sent" : "handed_off", by: session.staffId });
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -439,6 +451,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               </Button>
               <span className="ml-auto text-[11px] text-stone-400 xl:hidden">Booking and actions show at wider widths.</span>
             </div>
+            {sendError ? <p className="mt-2 text-xs text-rose-700">{sendError} Nothing was sent or written.</p> : null}
           </>
         )}
       </div>

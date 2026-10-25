@@ -1,8 +1,8 @@
 // Prints what the day-before check does to an empty desk: one auto-sent item per
 // booking arriving tomorrow, plus a front-office call trace where one is needed.
-import { reducer, type State } from "@/lib/store";
+import { EMPTY_STATE, reducer, type State } from "@/lib/store";
 
-const EMPTY: State = { items: {}, order: [], traces: [], handoffs: [], bookingUpdates: [], selectedId: null, hydrated: true, rotation: 0, session: null, gmail: null, samples: "none", shiftOverrides: {}, handovers: [] };
+const EMPTY: State = EMPTY_STATE;
 const s = reducer(EMPTY, { type: "day_before_run", by: "mgr-1" });
 for (const id of s.order) {
   const i = s.items[id];

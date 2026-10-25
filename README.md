@@ -36,7 +36,7 @@ Set `COPILOT_MODE=rules` to force the rules engine even when a key is present.
 
 ## Sign in
 
-Four roles, one prototype password: `aurel`. Or deep-link straight in:
+Four roles, one shared password: `aurel` locally, or whatever `DESK_PASSWORD` is set to. Signing in sets a server cookie that every API route checks, so nobody can sort, send or poll mail from outside the desk. The password is asked once per browser; after that the deep links below sign you straight in:
 
 | Role | Deep link | What they see first |
 |---|---|---|
@@ -59,6 +59,8 @@ The desk is a conversation view: the list on the left, the thread in the middle 
 | Groups specialist | Sales conversations only | Open |
 
 With a mailbox connected the desk starts empty and shows only real guest mail. Without one it loads the thirteen sample messages from the brief; they are also one click away on the sign-in page, or at `/?samples=load`.
+
+**Notifications:** the bell in the header carries only what the list cannot show: a reply the guest did not receive, conversations moved to you by a senior or at a shift end, a guest replying to a conversation you closed, items in your queue over an hour old, and your shift ending with work open. Seniors and managers also see agents with several overdue items, manager-queue arrivals and handovers that found nobody. New arrivals are not notifications; the list marks them with a "new since you last looked" line. Read state is per person.
 
 **Live:** keep a desk tab open, email the desk address from any account. Within 20 seconds the conversation appears, sorted, with an owner. A policy question is answered alone and shows as the AI agent's bubble; the reply lands in your inbox in the same thread. Anything else waits in the composer for the owner: read the draft, check the actions in the right panel, press **Approve & send**. A guest's later reply joins the same thread.
 
@@ -110,6 +112,21 @@ Use a fresh Gmail account for the desk, never a personal one: the desk takes eve
 
 Set `GMAIL_SEND=off` to read live mail but send nothing. Mail the desk has taken is labelled `Aurel/Desk` and marked read in the mailbox. The desk only ever replies to the original sender, in the same thread, with the text the owner approved.
 
+### Replies with no desk tab open
+
+Desk tabs poll the mailbox every 20 seconds, so with every tab closed nothing is read. The scheduled check fills that gap for the types that may send alone. A GitHub Actions workflow ([.github/workflows/poll-mailbox.yml](.github/workflows/poll-mailbox.yml)) calls `GET /api/cron/poll` every five minutes with a bearer token. That route reads new mail and:
+
+- sends the cited policy answer, the group acknowledgement, the holding reply or the off-topic decline, then labels the message `Aurel/Auto-replied` and leaves it unread, so the next desk tab still receives it and shows the reply in the thread;
+- labels everything that needs a person `Aurel/Waiting` and leaves it alone for the desk.
+
+Nothing is stored on the server; the Gmail labels are the whole state. Two costs to know about: a message the check has seen is sorted again when a desk tab takes it, so on the free Gemini tier every live email costs roughly double while the schedule is on; and GitHub runs schedules at best every five minutes, often a few minutes late. To switch it on:
+
+1. Set `CRON_SECRET` in `.env.local` and on Vercel (`openssl rand -base64 32`).
+2. In the GitHub repository, Settings → Secrets and variables → Actions, add `DESK_URL` (the deployment, no trailing slash) and `CRON_SECRET` (same value).
+3. Push to the default branch. Run it once by hand from the Actions tab to check the response: `{"checked":n,"replied":[…],"waiting":[…]}`.
+
+Without `CRON_SECRET` the route answers 503 and the workflow fails loudly instead of silently doing nothing.
+
 ## Layout
 
 ```
@@ -117,9 +134,9 @@ src/lib/pms        mock PMS: 9 hotels, rate plans, per-hotel policy paragraphs, 
 src/lib/agent      proposal schema (zod), rules engine, Gemini engine, templates + topic check, execution
 src/lib/desk       roster of 22, owner-on-arrival rule, Important rule, queues
 src/lib/inbox      seed messages from the brief plus guardrail tests
-src/lib/gmail      live Gmail link: pull new mail, label it, send replies in-thread
+src/lib/gmail      live Gmail link: pull new mail, label it, send replies in-thread; labels Aurel/Desk, Aurel/Auto-replied, Aurel/Waiting
 src/lib/store.tsx  client state: items, owners, queues, sessions (localStorage)
-src/app            login, desk (/), dashboard, PMS traces (/ops), how it works (/about), API routes incl. /api/gmail/*
+src/app            login, desk (/), dashboard, PMS traces (/ops), how it works (/about), API routes incl. /api/gmail/* and /api/cron/poll
 scripts            run-rules.ts, run-gemini.ts (Gemini vs rules diff), run-day-before.ts, gmail-auth.ts (one-time Gmail sign-in)
 ```
 
@@ -134,8 +151,12 @@ npx tsx scripts/run-day-before.ts     # what the day-before check sends and trac
 
 ```bash
 npx vercel
+npx vercel env add DESK_PASSWORD production   # what the team types to sign in
+npx vercel env add DESK_SECRET production     # signs the session cookie: openssl rand -base64 32
 npx vercel env add GEMINI_API_KEY production
 npx vercel --prod
 ```
+
+Without `DESK_PASSWORD` the password is `aurel` and the cookie is signed with a development secret, fine on a laptop, not on a public URL.
 
 No database. Desk state is kept in the browser; API routes are stateless.

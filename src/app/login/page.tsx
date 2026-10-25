@@ -1,12 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useStore } from "@/lib/store";
+import { useStore, type Session } from "@/lib/store";
 import { ROLE_LABEL, ROSTER, isOnShift, type Role } from "@/lib/desk/roster";
 import { Button } from "@/components/ui";
-
-const PASSWORD = "aurel";
 
 const ROLE_HINT: Record<Role, string> = {
   agent: "Works the Important view and their own queue. Approves, edits, changes the type.",
@@ -27,33 +25,63 @@ function LoginForm() {
   const { state, dispatch } = useStore();
   const router = useRouter();
   const params = useSearchParams();
-  // Prototype deep link: /login?as=agt-1 signs in as that person without the form.
+  const [now] = useState(() => new Date());
+  const onNow = (s: (typeof ROSTER)[number]) => isOnShift(s, now, state.shiftOverrides);
+  // A deep link (/login?as=agt-1) preselects that person; otherwise the first agent on shift.
+  const linkedStaff = ROSTER.find((x) => x.id === params.get("as"));
+  const [role, setRole] = useState<Role>(() => linkedStaff?.role ?? "agent");
+  const [staffId, setStaffId] = useState<string>(() => linkedStaff?.id ?? (ROSTER.find((s) => s.role === "agent" && isOnShift(s, new Date())) ?? ROSTER.find((s) => s.role === "agent"))!.id);
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // The server sets the session cookie the API routes check; the browser keeps a copy for display.
+  const signIn = async (id: string, password?: string): Promise<boolean> => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ staffId: id, password }) });
+      const j = (await r.json().catch(() => ({}))) as { session?: Session; error?: string };
+      if (!r.ok || !j.session) {
+        if (password !== undefined) setErr(j.error ?? `Sign-in failed (${r.status}).`);
+        return false;
+      }
+      dispatch({ type: "login", session: j.session });
+      const next = params.get("next");
+      router.replace(next && next.startsWith("/") ? next : j.session.role === "manager" ? "/dashboard" : "/");
+      return true;
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Prototype deep link: /login?as=agt-1 signs in as that person. Works without the
+  // form once this browser has entered the password; otherwise the form is prefilled.
+  const linked = useRef<string | null>(null);
   useEffect(() => {
     const as = params.get("as");
     if (!as || !state.hydrated) return;
     const s = ROSTER.find((x) => x.id === as);
     if (!s) return;
-    dispatch({ type: "login", session: { staffId: s.id, role: s.role, name: s.name } });
-    const next = params.get("next");
-    router.replace(next && next.startsWith("/") ? next : s.role === "manager" ? "/dashboard" : "/");
-  }, [params, state.hydrated, dispatch, router]);
-  const [now] = useState(() => new Date());
-  const onNow = (s: (typeof ROSTER)[number]) => isOnShift(s, now, state.shiftOverrides);
-  const [role, setRole] = useState<Role>("agent");
-  const [staffId, setStaffId] = useState<string>(() => (ROSTER.find((s) => s.role === "agent" && isOnShift(s, new Date())) ?? ROSTER.find((s) => s.role === "agent"))!.id);
-  const [pw, setPw] = useState("");
-  const [err, setErr] = useState<string | null>(null);
+    const t = setTimeout(() => {
+      if (linked.current === as) return;
+      linked.current = as;
+      void signIn(s.id).then((ok) => {
+        if (!ok) setErr("Enter the desk password once on this browser; deep links sign you straight in after that.");
+      });
+    }, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, state.hydrated]);
 
   const staffForRole = ROSTER.filter((s) => s.role === role);
 
   const submit = () => {
-    if (pw !== PASSWORD) {
-      setErr("Incorrect password. Please try again.");
-      return;
-    }
-    const s = ROSTER.find((x) => x.id === staffId)!;
-    dispatch({ type: "login", session: { staffId: s.id, role: s.role, name: s.name } });
-    router.replace(s.role === "manager" ? "/dashboard" : "/");
+    if (busy) return;
+    void signIn(staffId, pw);
   };
 
   return (
@@ -108,7 +136,9 @@ function LoginForm() {
           />
         </label>
         {err ? <div className="text-xs text-rose-700">{err}</div> : null}
-        <Button onClick={submit}>Sign in</Button>
+        <Button onClick={submit} disabled={busy}>
+          {busy ? "Signing in…" : "Sign in"}
+        </Button>
         <p className="text-[11px] text-stone-500">
           Roles change what you see; the desk is the same for everyone.
           {state.session ? ` Currently signed in as ${state.session.name}.` : ""}

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { isPending, useStore } from "@/lib/store";
 import { isOnShift, staffById } from "@/lib/desk/roster";
+import { NotificationBell } from "@/components/NotificationBell";
 
 export function Nav() {
   const path = usePathname();
@@ -81,6 +82,7 @@ export function Nav() {
               {health.engine === "gemini" ? `Gemini live${typeof health.used === "number" && health.capacity ? ` · ${health.used}/${health.capacity} requests` : ""}` : "Rules engine"}
             </span>
           ) : null}
+          {state.session ? <NotificationBell /> : null}
           {state.session ? (
             <span className="flex items-center gap-3 text-stone-600">
               <span>
@@ -101,6 +103,7 @@ export function Nav() {
               ) : null}
               <button
                 onClick={() => {
+                  void fetch("/api/logout", { method: "POST" }).catch(() => undefined);
                   dispatch({ type: "logout" });
                   router.replace("/login");
                 }}

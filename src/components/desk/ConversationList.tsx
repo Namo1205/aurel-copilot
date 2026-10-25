@@ -19,6 +19,7 @@ export function ConversationList({
   counts,
   emptyText,
   onCompose,
+  newSince,
 }: {
   conversations: Conversation[];
   views: View[];
@@ -29,10 +30,15 @@ export function ConversationList({
   counts: Record<string, number>;
   emptyText: string;
   onCompose?: () => void;
+  // ISO time the person last looked at the list; open conversations received after it get a divider.
+  newSince?: string | null;
 }) {
   const { state } = useStore();
   const [now, setNow] = useState(() => Date.now());
   const me = state.session?.staffId;
+  const isNew = (c: Conversation) => !!newSince && !!c.open && Date.parse(c.open.receivedAt) > Date.parse(newSince);
+  const firstNew = conversations.findIndex(isNew);
+  const newCount = conversations.filter(isNew).length;
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 15000);
@@ -60,7 +66,7 @@ export function ConversationList({
       </div>
       <ul className="flex-1 overflow-y-auto scroll-thin">
         {conversations.length === 0 ? <li className="p-6 text-sm text-stone-500 leading-relaxed">{emptyText}</li> : null}
-        {conversations.map((c) => {
+        {conversations.map((c, idx) => {
           const it = c.open ?? c.latest;
           const m = it.message;
           const p = it.analysis?.proposal;
@@ -75,6 +81,13 @@ export function ConversationList({
           const meta = [cat ? CATEGORY_LABEL[cat] : null, hotel ? hotel.name.replace(/^Aurel /, "") : null, mine ? null : ownerName(it.ownerId), c.items.length > 1 ? `${c.items.length} messages` : null].filter(Boolean).join(" · ");
           return (
             <li key={c.key}>
+              {idx === firstNew ? (
+                <div className="flex items-center gap-2 px-3 py-1 text-[11px] text-brand">
+                  <span className="flex-1 h-px bg-brand/30" />
+                  New since {new Date(newSince!).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })} · {newCount}
+                  <span className="flex-1 h-px bg-brand/30" />
+                </div>
+              ) : null}
               <button
                 onClick={() => onSelect(c)}
                 className={`w-full text-left pl-3 pr-4 py-3 border-b border-stone-100 border-l-[3px] flex gap-3 transition ${selected ? "bg-stone-50" : "hover:bg-stone-50/60"} ${

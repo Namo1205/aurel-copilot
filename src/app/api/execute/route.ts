@@ -3,9 +3,10 @@ import { execute } from "@/lib/agent/execute";
 import { AgentProposal } from "@/lib/agent/schema";
 import type { InboundMessage } from "@/lib/inbox/seed";
 import { gmailSendEnabled, sendReply } from "@/lib/gmail";
-
+import { getSession, unauthorized } from "@/lib/auth";
 
 export async function POST(req: Request) {
+  if (!(await getSession())) return unauthorized();
   const body = (await req.json()) as {
     message: InboundMessage;
     proposal: unknown;

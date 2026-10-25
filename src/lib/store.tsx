@@ -8,11 +8,11 @@ import { useRouter } from "next/navigation";
 import { SEED_MESSAGES, type InboundMessage } from "@/lib/inbox/seed";
 import type { AnalysisResult } from "@/lib/agent";
 import type { ExecutionResult, Handoff } from "@/lib/agent/execute";
-import type { Category } from "@/lib/agent/schema";
+import { CATEGORY_LABEL, type Category } from "@/lib/agent/schema";
 import type { Booking, Trace } from "@/lib/pms";
 import { BOOKINGS, createTrace, getBooking, getGuest, getHotel } from "@/lib/pms";
 import { TEMPLATES } from "@/lib/agent/templates";
-import { AI_OWNER_ID, assignOwner, importantReasons, isOnShift, queueFor, shiftEnded, staffById, type Queue, type Role, type ShiftOverrides } from "@/lib/desk/roster";
+import { AI_OWNER_ID, ROSTER, assignOwner, importantReasons, isOnShift, queueFor, shiftEnded, staffById, type Queue, type Role, type ShiftOverrides } from "@/lib/desk/roster";
 
 export type ItemStatus = "new" | "analyzing" | "drafted" | "sent" | "handed_off" | "auto_sent";
 
@@ -61,6 +61,25 @@ export interface Handover {
 
 export const NOBODY_TO_HAND_TO = "Owner off shift, nobody to hand to";
 
+// Notifications. Only things the conversation list cannot show by itself: changes
+// made to someone's work while they were not looking, and anything that failed.
+// "A new message arrived" is never an event; the list is the inbox.
+export type EventKind = "delivery_failed" | "moved_to_you" | "guest_replied" | "overdue" | "team_overdue" | "stuck_handover" | "manager_decision" | "shift_ending";
+export type EventGroup = "needs" | "changed" | "today";
+export interface DeskEvent {
+  id: string;
+  // Same key = same fact; appended once.
+  key?: string;
+  at: string;
+  kind: EventKind;
+  group: EventGroup;
+  // A staff id, or "role:<role>" for everyone in that role.
+  to: string;
+  title: string;
+  detail?: string;
+  itemId?: string;
+}
+
 export interface Session {
   staffId: string;
   role: Role;
@@ -85,6 +104,13 @@ export interface State {
   shiftOverrides: ShiftOverrides;
   // Shift-end handovers, newest first.
   handovers: Handover[];
+  // Notification events, newest first, capped.
+  events: DeskEvent[];
+  // Per person: when they last opened the bell.
+  notificationsSeenAt: Record<string, string>;
+  // Per person: the "new since you last looked" line. awayAt is set when they leave the
+  // list (other page, background tab); it becomes newSince when they come back.
+  listSeen: Record<string, { newSince: string | null; awayAt: string | null }>;
 }
 
 type Action =
@@ -115,11 +141,15 @@ type Action =
   // Employee manually replies to a conversation (either open or previously resolved).
   | { type: "manual_reply"; id: string; body: string; by: string; delivery?: { via: "gmail"; at: string; error?: string } }
   | { type: "shift_tick"; now: string }
+  | { type: "notifications_seen"; staffId: string }
+  | { type: "list_opened"; staffId: string }
+  | { type: "list_left"; staffId: string; at: string }
   | { type: "reset" };
 
 const KEY = "aurel-desk-state-v2";
 
-const EMPTY: State = { items: {}, order: [], traces: [], handoffs: [], bookingUpdates: [], selectedId: null, hydrated: false, rotation: 0, session: null, gmail: null, samples: "none", shiftOverrides: {}, handovers: [] };
+const EMPTY: State = { items: {}, order: [], traces: [], handoffs: [], bookingUpdates: [], selectedId: null, hydrated: false, rotation: 0, session: null, gmail: null, samples: "none", shiftOverrides: {}, handovers: [], events: [], notificationsSeenAt: {}, listSeen: {} };
+export const EMPTY_STATE: State = { ...EMPTY, hydrated: true };
 
 // The desk starts empty. Sample messages are loaded only in demo mode (no mailbox
 // connected) or when someone asks for them on the sign-in page.
@@ -169,6 +199,100 @@ function isVipOrAdvisor(item: InboxItem, bookingId: string | null): boolean {
   return !!(b && getGuest(b.guestId)?.vip);
 }
 
+// --- notification events -----------------------------------------------------
+
+const EVENT_LIMIT = 300;
+let eventSeq = 0;
+type NewEvent = Omit<DeskEvent, "id">;
+
+function withEvents(state: State, events: NewEvent[]): State {
+  if (!events.length) return state;
+  const keys = new Set(state.events.map((e) => e.key).filter(Boolean));
+  const fresh: DeskEvent[] = [];
+  for (const e of events) {
+    if (e.key && keys.has(e.key)) continue;
+    if (e.key) keys.add(e.key);
+    fresh.push({ ...e, id: `ev-${Date.now().toString(36)}-${(eventSeq++).toString(36)}` });
+  }
+  if (!fresh.length) return state;
+  return { ...state, events: [...fresh.reverse(), ...state.events].slice(0, EVENT_LIMIT) };
+}
+
+export function eventsFor(state: State, session: Session): DeskEvent[] {
+  return state.events.filter((e) => e.to === session.staffId || e.to === `role:${session.role}`);
+}
+
+export function unreadEvents(state: State, session: Session): DeskEvent[] {
+  const seen = state.notificationsSeenAt[session.staffId];
+  return eventsFor(state, session).filter((e) => !seen || Date.parse(e.at) > Date.parse(seen));
+}
+
+// One conversation per Gmail thread; simulated messages group by sender.
+function convKey(m: InboundMessage): string {
+  return m.gmail?.threadId ? `thread:${m.gmail.threadId}` : `from:${m.from.toLowerCase()}`;
+}
+
+function catLabel(item: InboxItem): string {
+  const c = effectiveCategory(item);
+  return c ? ` · ${CATEGORY_LABEL[c]}` : "";
+}
+
+// A guest wrote again to a conversation a person had closed: tell that person.
+function guestRepliedEvents(state: State, message: InboundMessage, at: string): NewEvent[] {
+  const key = convKey(message);
+  const thread = state.order.map((id) => state.items[id]).filter((i) => convKey(i.message) === key);
+  if (!thread.length || thread.some(isPending)) return [];
+  const last = [...thread].sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt))[thread.length - 1];
+  if (!last.handledBy || last.handledBy === AI_OWNER_ID) return [];
+  return [{ key: `guest_replied:${message.id}`, at, kind: "guest_replied", group: "changed", to: last.handledBy, title: "Guest replied to a conversation you closed", detail: `${message.fromName}: ${message.body.replace(/\s+/g, " ").slice(0, 90)}`, itemId: message.id }];
+}
+
+function managerEvents(message: InboundMessage, summary: string, queue: Queue, at: string): NewEvent[] {
+  if (queue !== "manager") return [];
+  return [{ key: `manager:${message.id}`, at, kind: "manager_decision", group: "needs", to: "role:manager", title: "Manager decision needed", detail: `${message.fromName} · ${summary}`, itemId: message.id }];
+}
+
+function deliveryFailedEvents(item: InboxItem, to: string[], error: string, at: string): NewEvent[] {
+  return to.map((who) => ({ key: `delivery_failed:${item.message.id}:${who}:${at}`, at, kind: "delivery_failed" as const, group: "needs" as const, to: who, title: "Reply not delivered", detail: `${item.message.fromName} · ${error.slice(0, 90)}`, itemId: item.message.id }));
+}
+
+function minutesOf(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// Once a minute: items over an hour old, agents with several of them, shifts about to end.
+function tickEvents(state: State, now: Date): NewEvent[] {
+  const out: NewEvent[] = [];
+  const at = now.toISOString();
+  const day = at.slice(0, 10);
+  const overdueByOwner: Record<string, InboxItem[]> = {};
+  for (const id of state.order) {
+    const it = state.items[id];
+    if (!isPending(it) || !it.ownerId || it.ownerId === AI_OWNER_ID) continue;
+    if ((now.getTime() - Date.parse(it.receivedAt)) / 60000 < 60) continue;
+    (overdueByOwner[it.ownerId] ??= []).push(it);
+    out.push({ key: `overdue:${id}`, at, kind: "overdue", group: "needs", to: it.ownerId, title: "Waiting over an hour", detail: `${it.message.fromName}${catLabel(it)}`, itemId: id });
+  }
+  for (const [ownerId, list] of Object.entries(overdueByOwner)) {
+    if (list.length < 3) continue;
+    const name = staffById(ownerId)?.name ?? ownerId;
+    for (const to of ["role:senior", "role:manager"]) {
+      out.push({ key: `team_overdue:${ownerId}:${day}:${to}`, at, kind: "team_overdue", group: "needs", to, title: `${name} has ${list.length} conversations over an hour old`, detail: list.slice(0, 3).map((i) => i.message.fromName).join(", ") });
+    }
+  }
+  const t = now.getHours() * 60 + now.getMinutes();
+  for (const s of ROSTER) {
+    if (!s.shift || !isOnShift(s, now, state.shiftOverrides)) continue;
+    const left = minutesOf(s.shift.end) - t;
+    if (left <= 0 || left > 15) continue;
+    const open = state.order.filter((id) => state.items[id].ownerId === s.id && isPending(state.items[id])).length;
+    if (!open) continue;
+    out.push({ key: `shift_ending:${s.id}:${day}`, at, kind: "shift_ending", group: "today", to: s.id, title: `Your shift ends at ${s.shift.end}`, detail: `${open} conversation${open === 1 ? "" : "s"} still open. Anything left moves to a colleague on shift by the owner rule.` });
+  }
+  return out;
+}
+
 // When people go off shift, every pending item they own moves by the same owner rule
 // that assigned it on arrival. If nobody of the right role is on shift the item stays,
 // flagged, so a senior or manager sees it on the dashboard.
@@ -178,6 +302,8 @@ export function handoverFrom(state: State, staffIds: string[], now: Date, reason
   let rotation = state.rotation;
   const handovers = [...state.handovers];
   const at = now.toISOString();
+  const moved = new Map<string, { to: string; from: string; names: string[] }>();
+  const stuck = new Map<string, string[]>();
   for (const id of state.order) {
     const it = items[id];
     if (!it.ownerId || !leaving.has(it.ownerId) || !isPending(it) || !it.analysis) continue;
@@ -188,8 +314,11 @@ export function handoverFrom(state: State, staffIds: string[], now: Date, reason
     const usable = assign.ownerId !== it.ownerId && !!target && isOnShift(target, now, state.shiftOverrides);
     if (!usable) {
       if (!it.important.includes(NOBODY_TO_HAND_TO)) items[id] = { ...it, important: [...it.important, NOBODY_TO_HAND_TO] };
+      stuck.set(it.ownerId, [...(stuck.get(it.ownerId) ?? []), it.message.fromName]);
       continue;
     }
+    const pair = `${assign.ownerId}|${it.ownerId}`;
+    moved.set(pair, { to: assign.ownerId, from: it.ownerId, names: [...(moved.get(pair)?.names ?? []), it.message.fromName] });
     rotation = assign.rotation;
     const fromName = staffById(it.ownerId)?.name ?? it.ownerId;
     const why = `Handed over from ${fromName} at ${reason}: ${assign.rule.replace(/\.$/, "")}`;
@@ -202,7 +331,18 @@ export function handoverFrom(state: State, staffIds: string[], now: Date, reason
     };
     handovers.unshift({ at, from: it.ownerId, to: assign.ownerId, itemId: id, reason });
   }
-  return { ...state, items, rotation, handovers };
+  const events: NewEvent[] = [];
+  for (const { to, from, names } of moved.values()) {
+    const n = names.length;
+    events.push({ key: `moved:${to}:${from}:${at}`, at, kind: "moved_to_you", group: "changed", to, title: `${n} conversation${n === 1 ? "" : "s"} moved to you`, detail: `From ${staffById(from)?.name ?? from} at ${reason}: ${names.slice(0, 3).join(", ")}${n > 3 ? ` and ${n - 3} more` : ""}` });
+  }
+  for (const [from, names] of stuck) {
+    const n = names.length;
+    for (const to of ["role:senior", "role:manager"]) {
+      events.push({ key: `stuck:${from}:${at}:${to}`, at, kind: "stuck_handover", group: "needs", to, title: `${n} conversation${n === 1 ? "" : "s"} stuck with ${staffById(from)?.name ?? from}`, detail: `Off shift and nobody of the same role is on. ${names.slice(0, 3).join(", ")}${n > 3 ? ` and ${n - 3} more` : ""}` });
+    }
+  }
+  return withEvents({ ...state, items, rotation, handovers }, events);
 }
 
 export function reducer(state: State, action: Action): State {
@@ -214,6 +354,7 @@ export function reducer(state: State, action: Action): State {
     case "add_message": {
       if (state.items[action.message.id]) return state;
       const receivedAt = new Date(Date.now() - (action.message.receivedMinutesAgo ?? 0) * 60000).toISOString();
+      const replied = guestRepliedEvents(state, action.message, receivedAt);
       if (action.message.serverAnalysis) {
         const p = action.message.serverAnalysis.proposal;
         const bookingId = p.bookingMatch.bookingId;
@@ -250,29 +391,39 @@ export function reducer(state: State, action: Action): State {
           handledAt: closed ? nowIso : undefined,
           handledBy: closed ? AI_OWNER_ID : undefined,
         };
-        return {
+        return withEvents(
+          {
+            ...state,
+            items: {
+              ...state.items,
+              [action.message.id]: item,
+            },
+            order: [action.message.id, ...state.order],
+            selectedId: action.message.id,
+            rotation: assign.rotation,
+          },
+          [...replied, ...managerEvents(action.message, p.triage.summary, queue, nowIso)],
+        );
+      }
+      return withEvents(
+        {
           ...state,
           items: {
             ...state.items,
-            [action.message.id]: item,
+            [action.message.id]: { message: action.message, receivedAt, status: "new", ownerId: null, queue: "agent", important: [] },
           },
           order: [action.message.id, ...state.order],
           selectedId: action.message.id,
-          rotation: assign.rotation,
-        };
-      }
-      return {
-        ...state,
-        items: {
-          ...state.items,
-          [action.message.id]: { message: action.message, receivedAt, status: "new", ownerId: null, queue: "agent", important: [] },
         },
-        order: [action.message.id, ...state.order],
-        selectedId: action.message.id,
-      };
+        replied,
+      );
     }
-    case "delivered":
-      return patch(state, action.id, { delivery: action.delivery });
+    case "delivered": {
+      const next = patch(state, action.id, { delivery: action.delivery });
+      if (!action.delivery.error) return next;
+      // The AI agent owns auto-sent items, so a failed one goes to the seniors and managers.
+      return withEvents(next, deliveryFailedEvents(next.items[action.id], ["role:senior", "role:manager"], action.delivery.error, action.delivery.at));
+    }
     case "analyzing":
       return patch(state, action.id, { status: "analyzing", error: undefined });
     case "analyzed": {
@@ -309,7 +460,7 @@ export function reducer(state: State, action: Action): State {
         handledAt: closed ? nowIso : undefined,
         handledBy: closed ? AI_OWNER_ID : undefined,
       });
-      return { ...next, rotation: assign.rotation };
+      return withEvents({ ...next, rotation: assign.rotation }, managerEvents(item.message, p.triage.summary, queue, nowIso));
     }
     case "analyze_failed":
       return patch(state, action.id, { status: "new", error: action.error });
@@ -323,12 +474,15 @@ export function reducer(state: State, action: Action): State {
     case "executed": {
       const item = state.items[action.id];
       const edited = !!item.analysis && (item.draft ?? "") !== item.analysis.proposal.draftReply;
-      return {
-        ...patch(state, action.id, { status: action.status, result: action.result, handledAt: new Date().toISOString(), handledBy: action.by, edited }),
+      const nowIso = new Date().toISOString();
+      const next = {
+        ...patch(state, action.id, { status: action.status, result: action.result, handledAt: nowIso, handledBy: action.by, edited }),
         traces: [...state.traces, ...action.result.traces],
         handoffs: [...state.handoffs, ...action.result.handoffs],
         bookingUpdates: [...state.bookingUpdates, ...action.result.bookingUpdates],
       };
+      const err = action.result.sentReply?.deliveryError;
+      return err ? withEvents(next, deliveryFailedEvents(next.items[action.id], [action.by], err, nowIso)) : next;
     }
     case "trace_status":
       return { ...state, traces: state.traces.map((t) => (t.id === action.traceId ? { ...t, status: action.status } : t)) };
@@ -337,26 +491,31 @@ export function reducer(state: State, action: Action): State {
     case "reassign": {
       const it = state.items[action.id];
       if (!it || it.ownerId === action.ownerId) return state;
-      const reason = `Reassigned by ${action.by ? (staffById(action.by)?.name ?? action.by) : "a senior or manager"}`;
-      return patch(state, action.id, {
+      const byName = action.by ? (staffById(action.by)?.name ?? action.by) : "a senior or manager";
+      const reason = `Reassigned by ${byName}`;
+      const at = new Date().toISOString();
+      const next = patch(state, action.id, {
         ownerId: action.ownerId,
         ownerRule: `${reason}.`,
         important: it.important.filter((r) => r !== NOBODY_TO_HAND_TO),
-        ownerHistory: [...(it.ownerHistory ?? []), { from: it.ownerId, to: action.ownerId, at: new Date().toISOString(), reason }],
+        ownerHistory: [...(it.ownerHistory ?? []), { from: it.ownerId, to: action.ownerId, at, reason }],
       });
+      // Taking a conversation yourself is not news to you.
+      if (action.by === action.ownerId || action.ownerId === AI_OWNER_ID) return next;
+      return withEvents(next, [{ key: `moved:${action.id}:${at}`, at, kind: "moved_to_you", group: "changed", to: action.ownerId, title: `Moved to you by ${byName}`, detail: `${it.message.fromName}${catLabel(it)}`, itemId: action.id }]);
     }
     case "resend_result": {
       const it = state.items[action.id];
       if (!it) return state;
       const delivery = { via: "gmail" as const, at: action.at, error: action.ok ? undefined : action.error ?? "send failed" };
-      if (it.result?.sentReply) {
-        return patch(state, action.id, {
-          result: { ...it.result, sentReply: { ...it.result.sentReply, body: action.body, sentAt: action.ok ? action.at : it.result.sentReply.sentAt, deliveredVia: action.ok ? "gmail" : undefined, deliveryError: action.ok ? undefined : action.error ?? "send failed" } },
-          handledBy: action.ok ? action.by : it.handledBy,
-          edited: it.edited || action.body !== it.result.sentReply.body,
-        });
-      }
-      return patch(state, action.id, { delivery, autoSentBody: action.ok ? action.body : it.autoSentBody, handledBy: action.ok ? action.by : it.handledBy });
+      const next = it.result?.sentReply
+        ? patch(state, action.id, {
+            result: { ...it.result, sentReply: { ...it.result.sentReply, body: action.body, sentAt: action.ok ? action.at : it.result.sentReply.sentAt, deliveredVia: action.ok ? "gmail" : undefined, deliveryError: action.ok ? undefined : action.error ?? "send failed" } },
+            handledBy: action.ok ? action.by : it.handledBy,
+            edited: it.edited || action.body !== it.result.sentReply.body,
+          })
+        : patch(state, action.id, { delivery, autoSentBody: action.ok ? action.body : it.autoSentBody, handledBy: action.ok ? action.by : it.handledBy });
+      return action.ok ? next : withEvents(next, deliveryFailedEvents(next.items[action.id], [action.by], delivery.error ?? "send failed", action.at));
     }
     case "manual_start": {
       const it = state.items[action.id];
@@ -427,10 +586,25 @@ export function reducer(state: State, action: Action): State {
     case "shift_tick": {
       const now = new Date(action.now);
       const ended = shiftEnded(now, state.shiftOverrides);
-      if (!ended.length) return state;
-      const overrides: ShiftOverrides = { ...state.shiftOverrides };
-      for (const s of ended) overrides[s.id] = "off";
-      return handoverFrom({ ...state, shiftOverrides: overrides }, ended.map((s) => s.id), now, "shift end");
+      let next = state;
+      if (ended.length) {
+        const overrides: ShiftOverrides = { ...state.shiftOverrides };
+        for (const s of ended) overrides[s.id] = "off";
+        next = handoverFrom({ ...state, shiftOverrides: overrides }, ended.map((s) => s.id), now, "shift end");
+      }
+      return withEvents(next, tickEvents(next, now));
+    }
+    case "notifications_seen":
+      return { ...state, notificationsSeenAt: { ...state.notificationsSeenAt, [action.staffId]: new Date().toISOString() } };
+    case "list_opened": {
+      const cur = state.listSeen[action.staffId];
+      // An immediate re-open (React strict mode remounts in development) is not a return.
+      const away = cur?.awayAt && Date.now() - Date.parse(cur.awayAt) > 2000 ? cur.awayAt : null;
+      return { ...state, listSeen: { ...state.listSeen, [action.staffId]: { newSince: away ?? cur?.newSince ?? null, awayAt: null } } };
+    }
+    case "list_left": {
+      const cur = state.listSeen[action.staffId];
+      return { ...state, listSeen: { ...state.listSeen, [action.staffId]: { newSince: cur?.newSince ?? null, awayAt: action.at } } };
     }
     case "login":
       return { ...state, session: action.session };
@@ -556,7 +730,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // so each message has a type, a queue and an owner before anyone opens it.
   const busy = useRef(false);
   useEffect(() => {
-    if (!state.hydrated || busy.current) return;
+    if (!state.hydrated || !state.session || busy.current) return;
     const nextId = state.order.find((id) => state.items[id].status === "new" && !state.items[id].error);
     if (!nextId) return;
     busy.current = true;
@@ -565,6 +739,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // Sample messages are sorted by the rules engine so the model quota is kept for real mail.
     fetch("/api/analyze", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: item.message, engine: isSample(nextId) ? "rules" : undefined }) })
       .then(async (r) => {
+        if (r.status === 401) {
+          dispatch({ type: "logout" });
+          throw new Error("Signed out. Sign in again to sort this message.");
+        }
         if (!r.ok) throw new Error(`Analyse failed (${r.status})`);
         dispatch({ type: "analyzed", id: nextId, analysis: (await r.json()) as AnalysisResult });
       })
@@ -572,7 +750,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         busy.current = false;
       });
-  }, [state.hydrated, state.order, state.items]);
+  }, [state.hydrated, state.session, state.order, state.items]);
 
   // Shift ends: once a minute, hand over the items of anyone whose window has closed.
   useEffect(() => {
@@ -583,13 +761,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [state.hydrated]);
 
-  // Live Gmail: pull new mail every 20 seconds while a tab is open.
+  // Live Gmail: pull new mail every 20 seconds while a signed-in tab is open.
   useEffect(() => {
-    if (!state.hydrated) return;
+    if (!state.hydrated || !state.session) return;
     let stop = false;
     const tick = async () => {
       try {
         const r = await fetch("/api/gmail/poll");
+        if (r.status === 401) {
+          dispatch({ type: "logout" });
+          return;
+        }
         if (!r.ok) return;
         const { messages } = (await r.json()) as { messages: InboundMessage[] };
         if (stop) return;
@@ -604,12 +786,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       stop = true;
       clearInterval(t);
     };
-  }, [state.hydrated]);
+  }, [state.hydrated, state.session]);
 
   // Live Gmail: what the AI agent sends alone really goes out, once, to the sender.
   const sending = useRef(new Set<string>());
   useEffect(() => {
-    if (!state.hydrated) return;
+    if (!state.hydrated || !state.session) return;
     for (const id of state.order) {
       const it = state.items[id];
       if (!it.message.gmail || !it.autoSentAt || !it.autoSentBody || it.delivery || sending.current.has(id)) continue;
@@ -621,7 +803,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
         .catch((e) => dispatch({ type: "delivered", id, delivery: { via: "gmail", at: new Date().toISOString(), error: e instanceof Error ? e.message : String(e) } }));
     }
-  }, [state.hydrated, state.order, state.items]);
+  }, [state.hydrated, state.session, state.order, state.items]);
 
   // Dynamic browser tab title: e.g. "(3) Aurel Reservations" when pending items need review.
   useEffect(() => {

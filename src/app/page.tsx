@@ -35,6 +35,24 @@ function DeskInner() {
   }, [wantSamples, state.hydrated, state.samples, dispatch]);
   const [composing, setComposing] = useState(false);
   const [viewId, setViewId] = useState<ViewId | null>(null);
+
+  // "New since you last looked": the store records when this person left the list
+  // (another page, background tab) and turns that into the divider when they return.
+  const staffId = session?.staffId;
+  useEffect(() => {
+    if (!state.hydrated || !staffId) return;
+    dispatch({ type: "list_opened", staffId });
+    const onVisibility = () => {
+      if (document.hidden) dispatch({ type: "list_left", staffId, at: new Date().toISOString() });
+      else dispatch({ type: "list_opened", staffId });
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      dispatch({ type: "list_left", staffId, at: new Date().toISOString() });
+    };
+  }, [state.hydrated, staffId, dispatch]);
+  const newSince = staffId ? (state.listSeen[staffId]?.newSince ?? null) : null;
   const [focus, setFocus] = useState<string>(""); // seniors: one agent's conversations
   const [now] = useState(() => new Date());
 
@@ -112,6 +130,7 @@ function DeskInner() {
         counts={counts}
         emptyText={emptyText}
         onCompose={session.role === "manager" || session.role === "senior" ? () => setComposing(true) : undefined}
+        newSince={newSince}
       />
       {composing ? (
         <div className="flex-1 min-w-0 overflow-y-auto scroll-thin">

@@ -4,7 +4,12 @@
 
 import type { InboundMessage } from "@/lib/inbox/seed";
 
-const LABEL_NAME = "Aurel/Desk";
+// Labels are the only state the mailbox link keeps, and they live in Gmail itself.
+export const LABELS = {
+  desk: "Aurel/Desk", // taken by a desk tab, delivered once
+  autoReplied: "Aurel/Auto-replied", // the scheduled check already answered it
+  waiting: "Aurel/Waiting", // the scheduled check saw it; it needs a person
+} as const;
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 
 export function gmailConfigured(): boolean {
@@ -54,18 +59,26 @@ export async function profile(): Promise<{ emailAddress: string }> {
 
 // --- labels ---------------------------------------------------------------
 
-let labelId: string | null = null;
+const labelIds = new Map<string, string>();
 
-async function deskLabelId(): Promise<string> {
-  if (labelId) return labelId;
+async function labelId(name: string): Promise<string> {
+  const hit = labelIds.get(name);
+  if (hit) return hit;
   const list = await gmail<{ labels: { id: string; name: string }[] }>("/labels");
-  const found = list.labels.find((l) => l.name === LABEL_NAME);
-  if (found) return (labelId = found.id);
+  for (const l of list.labels) labelIds.set(l.name, l.id);
+  const found = labelIds.get(name);
+  if (found) return found;
   const created = await gmail<{ id: string }>("/labels", {
     method: "POST",
-    body: JSON.stringify({ name: LABEL_NAME, labelListVisibility: "labelShow", messageListVisibility: "show" }),
+    body: JSON.stringify({ name, labelListVisibility: "labelShow", messageListVisibility: "show" }),
   });
-  return (labelId = created.id);
+  labelIds.set(name, created.id);
+  return created.id;
+}
+
+export async function addLabels(gmailId: string, names: string[]): Promise<void> {
+  const addLabelIds = await Promise.all(names.map(labelId));
+  await gmail(`/messages/${gmailId}/modify`, { method: "POST", body: JSON.stringify({ addLabelIds }) });
 }
 
 // --- reading ---------------------------------------------------------------
@@ -80,6 +93,7 @@ interface GmailMessage {
   id: string;
   threadId: string;
   internalDate?: string;
+  labelIds?: string[];
   payload: GmailPart;
 }
 
@@ -163,28 +177,56 @@ export function toInbound(m: GmailMessage): InboundMessage {
   };
 }
 
-// New, unread mail in the inbox that the desk has not taken yet. Each message
-// is labelled and marked read as it is taken, so it is only delivered once.
-export async function pullNewMessages(max = 10): Promise<InboundMessage[]> {
-  const q = `in:inbox is:unread -label:${LABEL_NAME} newer_than:3d`;
-  const list = await gmail<{ messages?: { id: string; threadId: string }[] }>(`/messages?q=${encodeURIComponent(q)}&maxResults=${max}`);
+// Unread inbox mail no desk tab has taken. Changes nothing in the mailbox except
+// system mail (the desk's own copies, Google notices, bounces), which is labelled
+// as taken and skipped so it is never replied to. Messages the scheduled check has
+// already answered come back flagged, so the caller shows the reply instead of sending one.
+export async function listNewMessages(opts: { max?: number; excludeLabels?: string[] } = {}): Promise<InboundMessage[]> {
+  const exclude = [LABELS.desk, ...(opts.excludeLabels ?? [])];
+  const q = `in:inbox is:unread ${exclude.map((l) => `-label:${l}`).join(" ")} newer_than:3d`;
+  const list = await gmail<{ messages?: { id: string; threadId: string }[] }>(`/messages?q=${encodeURIComponent(q)}&maxResults=${opts.max ?? 10}`);
   const ids = list.messages ?? [];
   if (!ids.length) return [];
-  const label = await deskLabelId();
+  const [desk, autoReplied, me] = await Promise.all([labelId(LABELS.desk), labelId(LABELS.autoReplied), selfAddress()]);
   const out: InboundMessage[] = [];
   for (const { id } of ids) {
     const full = await gmail<GmailMessage>(`/messages/${id}?format=full`);
-    // Skip what the desk itself sent, and system mail nobody should ever reply to
-    // (Google account notices, bounces, newsletters).
     const fromHeader = header(full.payload, "From").toLowerCase();
-    if (fromHeader.includes((await selfAddress()).toLowerCase()) || isSystemSender(fromHeader)) {
-      await gmail(`/messages/${id}/modify`, { method: "POST", body: JSON.stringify({ addLabelIds: [label], removeLabelIds: ["UNREAD"] }) });
+    if (fromHeader.includes(me.toLowerCase()) || isSystemSender(fromHeader)) {
+      await gmail(`/messages/${id}/modify`, { method: "POST", body: JSON.stringify({ addLabelIds: [desk], removeLabelIds: ["UNREAD"] }) });
       continue;
     }
-    out.push(toInbound(full));
-    await gmail(`/messages/${id}/modify`, { method: "POST", body: JSON.stringify({ addLabelIds: [label], removeLabelIds: ["UNREAD"] }) });
+    const msg = toInbound(full);
+    msg.gmail!.autoReplied = (full.labelIds ?? []).includes(autoReplied);
+    out.push(msg);
   }
   return out;
+}
+
+// A desk tab takes a message: labelled and marked read, so it is delivered once.
+export async function markTaken(gmailId: string): Promise<void> {
+  const [desk, waiting] = await Promise.all([labelId(LABELS.desk), labelId(LABELS.waiting)]);
+  await gmail(`/messages/${gmailId}/modify`, { method: "POST", body: JSON.stringify({ addLabelIds: [desk], removeLabelIds: ["UNREAD", waiting] }) });
+}
+
+// What a desk tab polls: every new message, taken as it is read.
+export async function pullNewMessages(max = 10): Promise<InboundMessage[]> {
+  const list = await listNewMessages({ max });
+  for (const m of list) await markTaken(m.gmail!.id);
+  return list;
+}
+
+// The desk's own latest reply in a thread: what the scheduled check sent, read back
+// from Gmail so the desk can show it without having stored anything.
+export async function ownReplyInThread(threadId: string): Promise<{ body: string; at: string } | null> {
+  const me = (await selfAddress()).toLowerCase();
+  const t = await gmail<{ messages?: GmailMessage[] }>(`/threads/${threadId}?format=full`);
+  const mine = (t.messages ?? []).filter((m) => header(m.payload, "From").toLowerCase().includes(me));
+  const last = mine[mine.length - 1];
+  if (!last) return null;
+  const plain = findPart(last.payload, "text/plain");
+  const raw = plain?.body?.data ? b64url(plain.body.data) : last.payload.body?.data ? b64url(last.payload.body.data) : "";
+  return { body: raw.trim(), at: new Date(Number(last.internalDate ?? Date.now())).toISOString() };
 }
 
 const SYSTEM_SENDER = /no-?reply|do-?not-?reply|mailer-daemon|postmaster|@google\.com|@accounts\.google|notification|newsletter/i;

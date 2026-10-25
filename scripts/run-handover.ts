@@ -2,12 +2,12 @@
 // sorts the sample messages with the rules engine, ends Carlos Mendes's shift,
 // prints who received what, and checks a second run moves nothing.
 //   npx tsx scripts/run-handover.ts
-import { reducer, type State } from "@/lib/store";
+import { EMPTY_STATE, reducer, type State } from "@/lib/store";
 import { SEED_MESSAGES } from "@/lib/inbox/seed";
 import { analyzeWithRules } from "@/lib/agent/rules";
 import { ownerName } from "@/lib/desk/roster";
 
-const EMPTY: State = { items: {}, order: [], traces: [], handoffs: [], bookingUpdates: [], selectedId: null, hydrated: true, rotation: 0, session: null, gmail: null, samples: "none", shiftOverrides: {}, handovers: [] };
+const EMPTY: State = EMPTY_STATE;
 
 // A weekday at 11:00 desk time: early shift on, late shift not yet in.
 const now = new Date();

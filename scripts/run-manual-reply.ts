@@ -1,9 +1,9 @@
 // Checks the two "reply failed" paths on the store without a mailbox:
 // 1. sorting failed → a person takes the item and writes the reply;
 // 2. Gmail could not deliver → the person sends the text again (edited) and the item is marked delivered.
-import { reducer, type State } from "@/lib/store";
+import { EMPTY_STATE, reducer, type State } from "@/lib/store";
 
-const EMPTY: State = { items: {}, order: [], traces: [], handoffs: [], bookingUpdates: [], selectedId: null, hydrated: true, rotation: 0, session: null, gmail: null, samples: "none", shiftOverrides: {}, handovers: [] };
+const EMPTY: State = EMPTY_STATE;
 const msg = { id: "gmail-x1", channel: "email" as const, from: "guest@example.com", fromName: "Guest", subject: "Hello", body: "Hi there", receivedMinutesAgo: 0, gmail: { id: "x1", threadId: "t1", messageId: "<x1@example.com>" } };
 
 let s = reducer(EMPTY, { type: "add_message", message: msg });
