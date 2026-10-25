@@ -19,6 +19,9 @@ export interface InboundMessage {
   // Loaded from the mailbox long after it arrived (more than a day). Sorted and owned
   // like any message, but nothing is sent alone: a person decides.
   imported?: boolean;
+  // Files the guest attached. Names and sizes only; the file itself is fetched from the
+  // mailbox when a person opens it, and is never shown to the assistant.
+  attachments?: { id: string; name: string; mimeType: string; size: number }[];
   serverAnalysis?: AnalysisResult;
   serverAutoSent?: {
     kind: string;

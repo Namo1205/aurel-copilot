@@ -144,7 +144,7 @@ export type Action =
   // Sorting failed, or the person wants to write the reply themselves from scratch.
   | { type: "manual_start"; id: string; by: string }
   // Employee manually replies to a conversation (either open or previously resolved).
-  | { type: "manual_reply"; id: string; body: string; by: string; delivery?: { via: "gmail"; at: string; error?: string } }
+  | { type: "manual_reply"; id: string; body: string; by: string; delivery?: { via: "gmail"; at: string; error?: string }; attachments?: { name: string; size: number }[] }
   | { type: "shift_tick"; now: string }
   | { type: "notifications_seen"; staffId: string }
   | { type: "mailbox_sync"; sync: Partial<State["mailboxSync"]> }
@@ -631,6 +631,7 @@ export function reducer(state: State, action: Action): State {
         to: it.message.from,
         deliveredVia: action.delivery?.via,
         deliveryError: action.delivery?.error,
+        attachments: action.attachments?.length ? action.attachments : undefined,
       };
       return patch(state, action.id, {
         status: "sent",

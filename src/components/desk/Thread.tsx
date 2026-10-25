@@ -10,6 +10,7 @@ import type { AnalysisResult } from "@/lib/agent";
 import type { ExecutionResult } from "@/lib/agent/execute";
 import { ASSISTANT_NAME, CATEGORY_ORDER, ROSTER, isOnShift, ownerName } from "@/lib/desk/roster";
 import type { Conversation } from "@/lib/desk/visibility";
+import { AttachmentPicker, InboundAttachments, PaperclipIcon, encodeFiles } from "@/components/desk/Attachments";
 
 export function ago(iso: string): string {
   const t = timeAgo(iso);
@@ -90,6 +91,7 @@ function Exchange({ item }: { item: InboxItem }) {
       <Bubble side="guest" who={m.fromName} when={ago(item.receivedAt)}>
         {m.subject ? <div className="font-medium mb-1">{m.subject}</div> : null}
         {body}
+        <InboundAttachments message={m} />
       </Bubble>
       {item.autoSentAt && item.autoSentBody ? (
         <div className="flex justify-end">
@@ -119,6 +121,12 @@ function Exchange({ item }: { item: InboxItem }) {
             ) : (
               <div className="inline-block text-left rounded-2xl rounded-tr-md px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap bg-brand text-white">{item.result.sentReply.body}</div>
             )}
+            {item.result.sentReply.attachments?.length ? (
+              <div className="mt-1 text-[11px] text-stone-500 text-right inline-flex items-center gap-1 w-full justify-end">
+                <PaperclipIcon /> {item.result.sentReply.attachments.map((a) => a.name).join(", ")}
+                {item.result.sentReply.deliveryError ? <span className="text-rose-700"> · not re-sent on retry, attach again if needed</span> : null}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -134,6 +142,12 @@ export function Thread({ conversation }: { conversation: Conversation }) {
   const [sendError, setSendError] = useState<string | null>(null);
   const [now] = useState(() => new Date());
   const [manualText, setManualText] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const onFiles = (next: File[], error: string | null) => {
+    setFiles(next);
+    setAttachError(error);
+  };
   const [replyMode, setReplyMode] = useState<"ai" | "manual">("ai");
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -141,13 +155,14 @@ export function Thread({ conversation }: { conversation: Conversation }) {
     if (!textToSend.trim() || !session) return;
     setBusy(true);
     try {
+      const attachments = await encodeFiles(files);
       let delivery: { via: "gmail"; at: string; error?: string } | undefined;
       if (m.gmail) {
         try {
           const r = await fetch("/api/gmail/send", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ message: m, body: textToSend }),
+            body: JSON.stringify({ message: m, body: textToSend, attachments }),
           });
           const j = (await r.json()) as { ok: boolean; at?: string; error?: string };
           delivery = {
@@ -169,8 +184,10 @@ export function Thread({ conversation }: { conversation: Conversation }) {
         body: textToSend,
         by: session.staffId,
         delivery,
+        attachments: attachments.map((a) => ({ name: a.name, size: a.size })),
       });
       setManualText("");
+      setFiles([]);
     } finally {
       setBusy(false);
     }
@@ -210,10 +227,11 @@ export function Thread({ conversation }: { conversation: Conversation }) {
     setSendError(null);
     try {
       const approvedActionIndexes = (open.approved ?? []).map((a, i) => (a ? i : -1)).filter((i) => i >= 0);
+      const attachments = sendReply ? await encodeFiles(files) : [];
       const r = await fetch("/api/execute", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: m, proposal: p, approvedActionIndexes, draftReply: open.draft ?? p.draftReply, sendReply }),
+        body: JSON.stringify({ message: m, proposal: p, approvedActionIndexes, draftReply: open.draft ?? p.draftReply, sendReply, attachments }),
       });
       if (r.status === 401) {
         dispatch({ type: "logout" });
@@ -225,6 +243,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
       }
       const result = (await r.json()) as ExecutionResult;
       dispatch({ type: "executed", id, result, status: sendReply ? "sent" : "handed_off", by: session.staffId });
+      setFiles([]);
     } catch (e) {
       setSendError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -346,11 +365,13 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               placeholder={`Write to ${m.fromName}…`}
               className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim()}>
                 {busy ? "Sending…" : "Send"}
               </Button>
+              {m.gmail ? <AttachmentPicker files={files} onChange={onFiles} disabled={busy} /> : null}
             </div>
+            {attachError ? <p className="text-xs text-rose-700">{attachError}</p> : null}
           </div>
         ) : !p ? (
           <div className="space-y-2.5">
@@ -364,11 +385,13 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               placeholder={`Write your reply to ${m.fromName}…`}
               className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim()}>
                 {busy ? "Sending…" : "Send"}
               </Button>
+              {m.gmail ? <AttachmentPicker files={files} onChange={onFiles} disabled={busy} /> : null}
             </div>
+            {attachError ? <p className="text-xs text-rose-700">{attachError}</p> : null}
           </div>
         ) : !canAct ? (
           <div className="flex items-center justify-between text-sm text-stone-600 bg-stone-50 p-3.5 rounded-xl border border-stone-200">
@@ -450,8 +473,10 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               <Button variant="ghost" onClick={() => executeNow(false)} disabled={busy}>
                 {handoff ? "Hand off without replying" : p.actions.length ? "Do the actions, no reply" : "Close without replying"}
               </Button>
+              {m.gmail ? <AttachmentPicker files={files} onChange={onFiles} disabled={busy} /> : null}
               <span className="ml-auto text-[11px] text-stone-400 xl:hidden">Booking and actions show at wider widths.</span>
             </div>
+            {attachError ? <p className="mt-2 text-xs text-rose-700">{attachError}</p> : null}
             {sendError ? <p className="mt-2 text-xs text-rose-700">{sendError} Nothing was sent or written.</p> : null}
           </>
         )}

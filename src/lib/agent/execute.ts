@@ -15,8 +15,13 @@ export interface Handoff {
   createdAt: string;
 }
 
+export interface SentAttachment {
+  name: string;
+  size: number;
+}
+
 export interface ExecutionResult {
-  sentReply: { channel: string; to: string; body: string; sentAt: string; deliveredVia?: "gmail"; deliveryError?: string } | null;
+  sentReply: { channel: string; to: string; body: string; sentAt: string; deliveredVia?: "gmail"; deliveryError?: string; attachments?: SentAttachment[] } | null;
   traces: Trace[];
   bookingUpdates: Booking[];
   handoffs: Handoff[];
@@ -30,8 +35,9 @@ export function execute(input: {
   approvedActionIndexes: number[];
   draftReply: string;
   sendReply: boolean;
+  attachments?: SentAttachment[];
 }): ExecutionResult {
-  const { message, proposal, approvedActionIndexes, draftReply, sendReply } = input;
+  const { message, proposal, approvedActionIndexes, draftReply, sendReply, attachments } = input;
   const result: ExecutionResult = { sentReply: null, traces: [], bookingUpdates: [], handoffs: [], paymentLinks: [], skipped: [] };
   const now = new Date().toISOString();
 
@@ -88,7 +94,7 @@ export function execute(input: {
   if (sendReply) {
     let body = redactCards(draftReply);
     if (result.paymentLinks.length) body = body.replace("[Secure payment link will be inserted on send]", result.paymentLinks[0]);
-    result.sentReply = { channel: message.channel, to: message.from, body, sentAt: now };
+    result.sentReply = { channel: message.channel, to: message.from, body, sentAt: now, attachments: attachments?.length ? attachments : undefined };
   }
   return result;
 }

@@ -123,6 +123,7 @@ export function ConversationList({
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-stone-500">
                     <span className="truncate">{meta || (isPending(it) ? "Sorting…" : "")}</span>
                     {p?.sensitiveData.present ? <span className="shrink-0 text-rose-700">· Sensitive</span> : null}
+                    {m.attachments?.length ? <span className="shrink-0 text-stone-400" title={m.attachments.map((a) => a.name).join(", ")}>· 📎 {m.attachments.length}</span> : null}
                     {it.status === "analyzing" || it.status === "new" ? <span className="ml-auto shrink-0 text-stone-400">Sorting…</span> : null}
                     {waiting && it.autoSentAt ? <span className="ml-auto shrink-0 text-amber-700">Needs decision</span> : null}
                   </div>

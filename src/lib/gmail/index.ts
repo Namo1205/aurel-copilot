@@ -85,9 +85,28 @@ export async function addLabels(gmailId: string, names: string[]): Promise<void>
 
 interface GmailPart {
   mimeType?: string;
-  body?: { data?: string; size?: number };
+  filename?: string;
+  body?: { data?: string; size?: number; attachmentId?: string };
   parts?: GmailPart[];
   headers?: { name: string; value: string }[];
+}
+
+// Real attachments only: parts with a file name and an id. Small inline images (signature
+// logos) are skipped.
+function collectAttachments(p: GmailPart, out: NonNullable<InboundMessage["attachments"]> = []): NonNullable<InboundMessage["attachments"]> {
+  const disposition = p.headers?.find((h) => h.name.toLowerCase() === "content-disposition")?.value.toLowerCase() ?? "";
+  const size = p.body?.size ?? 0;
+  const inlineLogo = disposition.startsWith("inline") && (p.mimeType ?? "").startsWith("image/") && size < 50 * 1024;
+  if (p.filename && p.body?.attachmentId && !inlineLogo) out.push({ id: p.body.attachmentId, name: p.filename, mimeType: p.mimeType ?? "application/octet-stream", size });
+  for (const c of p.parts ?? []) collectAttachments(c, out);
+  return out;
+}
+
+// One attachment's bytes, fetched from Gmail when a person opens it.
+export async function fetchAttachment(messageId: string, attachmentId: string): Promise<Buffer> {
+  const a = await gmail<{ data?: string; size?: number }>(`/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`);
+  if (!a.data) throw new Error("Attachment has no data.");
+  return Buffer.from(a.data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
 }
 interface GmailMessage {
   id: string;
@@ -158,6 +177,7 @@ export function toInbound(m: GmailMessage): InboundMessage {
   const body = stripQuoted(raw) || "(empty message)";
   const received = m.internalDate ? Number(m.internalDate) : Date.now();
   const refMatch = `${subject} ${body}`.match(/\bAUR-\d{5}\b/);
+  const attachments = collectAttachments(m.payload);
   return {
     id: `gmail-${m.id}`,
     channel: "email",
@@ -167,6 +187,7 @@ export function toInbound(m: GmailMessage): InboundMessage {
     body: body.slice(0, 6000),
     receivedMinutesAgo: Math.max(0, Math.round((Date.now() - received) / 60000)),
     bookingRef: refMatch?.[0],
+    attachments: attachments.length ? attachments : undefined,
     gmail: {
       id: m.id,
       threadId: m.threadId,
@@ -366,8 +387,45 @@ function encodeHeader(value: string): string {
   return /^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
 }
 
-export async function sendReply(input: { message: InboundMessage; body: string }): Promise<{ id: string; threadId: string; to: string }> {
-  const { message, body } = input;
+export interface OutgoingAttachment {
+  name: string;
+  mimeType: string;
+  dataBase64: string;
+}
+
+// Up to a few MB in total: Vercel accepts about 4.5 MB per request, base64 included.
+export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+
+export function attachmentsTooLarge(atts: OutgoingAttachment[] | undefined): boolean {
+  return !!atts && atts.reduce((s, a) => s + Math.floor((a.dataBase64.length * 3) / 4), 0) > MAX_ATTACHMENT_BYTES;
+}
+
+const wrap76 = (b64: string) => b64.replace(/(.{76})/g, "$1\r\n");
+const asciiName = (name: string) => name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+
+// The raw email: headers, one blank line, then either the text alone or a multipart body
+// with the text first and each file after it.
+export function buildMime(headers: string[], body: string, attachments: OutgoingAttachment[] = []): string {
+  if (!attachments.length) {
+    const h = [...headers, "MIME-Version: 1.0", 'Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: base64"];
+    return h.join("\r\n") + "\r\n\r\n" + wrap76(Buffer.from(body, "utf8").toString("base64"));
+  }
+  const boundary = `aurel-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const h = [...headers, "MIME-Version: 1.0", `Content-Type: multipart/mixed; boundary="${boundary}"`];
+  const parts = [
+    `--${boundary}\r\nContent-Type: text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap76(Buffer.from(body, "utf8").toString("base64"))}`,
+    ...attachments.map((a) => {
+      const type = /^[\w.+-]+\/[\w.+-]+$/.test(a.mimeType) ? a.mimeType : "application/octet-stream";
+      const name = asciiName(a.name) || "attachment";
+      return `--${boundary}\r\nContent-Type: ${type}; name="${name}"\r\nContent-Disposition: attachment; filename="${name}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap76(a.dataBase64.replace(/\s+/g, ""))}`;
+    }),
+  ];
+  return h.join("\r\n") + "\r\n\r\n" + parts.join("\r\n") + `\r\n--${boundary}--`;
+}
+
+export async function sendReply(input: { message: InboundMessage; body: string; attachments?: OutgoingAttachment[] }): Promise<{ id: string; threadId: string; to: string }> {
+  const { message, body, attachments } = input;
+  if (attachmentsTooLarge(attachments)) throw new Error(`Attachments are limited to ${Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024))} MB in total.`);
   if (!gmailSendEnabled()) throw new Error("Gmail sending is off (GMAIL_SEND=off or not configured).");
   if (!message.gmail) throw new Error("This message did not come from Gmail; nothing to reply to.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(message.from)) throw new Error(`Refusing to send: sender address "${message.from}" is not a valid email.`);
@@ -383,11 +441,8 @@ export async function sendReply(input: { message: InboundMessage; body: string }
     `Subject: ${encodeHeader(subject)}`,
     message.gmail.messageId ? `In-Reply-To: ${message.gmail.messageId}` : "",
     refs ? `References: ${refs}` : "",
-    "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: base64",
   ].filter((l) => l !== "");
-  const mime = headers.join("\r\n") + "\r\n\r\n" + Buffer.from(body, "utf8").toString("base64").replace(/(.{76})/g, "$1\r\n");
+  const mime = buildMime(headers, body, attachments);
   const raw = Buffer.from(mime, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const sent = await gmail<{ id: string; threadId: string }>("/messages/send", { method: "POST", body: JSON.stringify({ raw, threadId: message.gmail.threadId }) });
   return { ...sent, to: message.from };
