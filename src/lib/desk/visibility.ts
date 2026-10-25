@@ -79,7 +79,7 @@ export function viewsFor(role: Role): View[] {
   const auto: View = { id: "auto", label: "Sent alone", filter: (c) => c.items.some((i) => !!i.autoSentAt), section: "record", icon: "sent" };
   switch (role) {
     case "agent":
-      return [open, done];
+      return [open, important, done];
     case "groups":
       return [open, done];
     case "senior":
