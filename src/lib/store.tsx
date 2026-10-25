@@ -400,7 +400,7 @@ export function reducer(state: State, action: Action): State {
           draft: p.draftReply,
           approved: p.actions.map(() => true),
           ownerId: closed ? AI_OWNER_ID : assign.ownerId,
-          ownerRule: closed ? "Answered alone by the AI agent; it owns the item." : assign.rule,
+          ownerRule: closed ? "Answered alone by Aurel Assistant; it owns the item." : assign.rule,
           ownerHistory: [{ from: null, to: closed ? AI_OWNER_ID : assign.ownerId, at: nowIso, reason: closed ? "Sent alone" : assign.rule }],
           queue,
           important,
@@ -512,7 +512,7 @@ export function reducer(state: State, action: Action): State {
         draft: p.draftReply,
         approved: p.actions.map(() => true),
         ownerId: closed ? AI_OWNER_ID : assign.ownerId,
-        ownerRule: closed ? "Answered alone by the AI agent; it owns the item." : assign.rule,
+        ownerRule: closed ? "Answered alone by Aurel Assistant; it owns the item." : assign.rule,
         ownerHistory: [{ from: null, to: closed ? AI_OWNER_ID : assign.ownerId, at: nowIso, reason: closed ? "Sent alone" : assign.rule }],
         queue,
         important,
@@ -586,9 +586,9 @@ export function reducer(state: State, action: Action): State {
         engine: "rules",
         latencyMs: 0,
         proposal: {
-          triage: { category: "other", secondaryCategories: [], hotelId: null, urgency: "normal", language: "en", summary: "Written by hand: the AI agent could not sort this message." },
+          triage: { category: "other", secondaryCategories: [], hotelId: null, urgency: "normal", language: "en", summary: "Written by hand: Aurel Assistant could not sort this message." },
           bookingMatch: { bookingId: it.message.bookingRef ?? null, confidence: it.message.bookingRef ? "high" : "none", note: it.message.bookingRef ? "Reference carried by the message." : "No sorting ran." },
-          sensitiveData: { present: false, types: [], handling: "Not checked by the AI agent; the person replying is responsible." },
+          sensitiveData: { present: false, types: [], handling: "Not checked by Aurel Assistant; the person replying is responsible." },
           actions: [],
           draftReply: "",
           didNotPromise: [],
@@ -706,7 +706,7 @@ export function reducer(state: State, action: Action): State {
           receivedAt: nowIso,
           status: "auto_sent",
           ownerId: AI_OWNER_ID,
-          ownerRule: "Day-before check, fixed template; the AI agent owns it.",
+          ownerRule: "Day-before check, fixed template; Aurel Assistant owns it.",
           queue: "auto",
           important: [],
           autoSentAt: nowIso,
@@ -873,7 +873,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const it = state.items[id];
       return it && isPending(it);
     }).length;
-    document.title = count > 0 ? `(${count}) Aurel Reservations` : "Aurel Reservations AI Agent";
+    document.title = count > 0 ? `(${count}) Aurel Reservations` : "Aurel Reservations";
   }, [state.order, state.items]);
 
   const value = useMemo(() => ({ state, dispatch }), [state]);

@@ -8,7 +8,7 @@ import { getHotel } from "@/lib/pms";
 import { redactCards } from "@/lib/agent/rules";
 import type { AnalysisResult } from "@/lib/agent";
 import type { ExecutionResult } from "@/lib/agent/execute";
-import { CATEGORY_ORDER, ROSTER, isOnShift, ownerName } from "@/lib/desk/roster";
+import { ASSISTANT_NAME, CATEGORY_ORDER, ROSTER, isOnShift, ownerName } from "@/lib/desk/roster";
 import type { Conversation } from "@/lib/desk/visibility";
 
 export function ago(iso: string): string {
@@ -95,7 +95,7 @@ function Exchange({ item }: { item: InboxItem }) {
         <div className="flex justify-end">
           <div className="max-w-[78%]">
             <div className="text-[11px] text-stone-400 mb-1 text-right">
-              AI agent · {p ? AUTO_SEND_LABEL[p.autoSend.kind] ?? "sent alone" : "sent alone"} · {ago(item.autoSentAt)}
+              {ASSISTANT_NAME} · {p ? AUTO_SEND_LABEL[p.autoSend.kind] ?? "sent alone" : "sent alone"} · {ago(item.autoSentAt)}
               {item.message.gmail ? (item.delivery ? (item.delivery.error ? <span className="text-rose-700"> · not delivered</span> : " · delivered") : " · sending…") : null}
             </div>
             {item.delivery?.error ? (
@@ -111,7 +111,7 @@ function Exchange({ item }: { item: InboxItem }) {
           <div className="max-w-[78%]">
             <div className="text-[11px] text-stone-400 mb-1 text-right">
               {ownerName(item.handledBy ?? null)} · {ago(item.result.sentReply.sentAt)}
-              {item.edited ? " · edited the draft" : " · AI draft as written"}
+              {item.edited ? " · edited the suggested reply" : " · suggested reply as written"}
               {item.result.sentReply.deliveredVia === "gmail" ? " · delivered" : item.result.sentReply.deliveryError ? <span className="text-rose-700"> · not delivered</span> : null}
             </div>
             {item.result.sentReply.deliveryError ? (
@@ -249,7 +249,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
           </div>
           <div className="flex items-center gap-x-2 text-[13px] text-stone-600 truncate">
             {p && category ? (
-              <span className={`relative inline-flex items-center gap-1 font-medium -ml-1 px-1 rounded ${!open || !canAct ? "" : "hover:bg-stone-100"}`} title="Change the type if the AI agent sorted it wrong. Counted as a correction.">
+              <span className={`relative inline-flex items-center gap-1 font-medium -ml-1 px-1 rounded ${!open || !canAct ? "" : "hover:bg-stone-100"}`} title="Change the type if Aurel Assistant sorted it wrong. Counted as a correction.">
                 {CATEGORY_LABEL[category]}
                 {!open || !canAct ? null : <span className="text-stone-400 text-xs">▾</span>}
                 {!open || !canAct ? null : (
@@ -320,7 +320,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
                   ) : null}
                 </span>
               ) : (
-                "AI agent is reading this, finding the booking, checking prices and policies…"
+                "Aurel Assistant is reading this, finding the booking, checking prices and policies…"
               )}
             </div>
           </div>
@@ -333,7 +333,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
           <div className="space-y-2.5">
             <div className="flex items-center justify-between text-xs text-stone-500">
               <span className="font-semibold text-stone-700 flex items-center gap-1.5">
-                <span>✍️</span> Send manual reply or follow-up to {m.fromName}
+                Reply or follow up to {m.fromName}
               </span>
               <span className="text-stone-400">
                 {m.gmail ? "Delivered to guest via live Gmail" : "Desk simulation"}
@@ -343,30 +343,30 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               value={manualText}
               onChange={(e) => setManualText(e.target.value)}
               rows={3}
-              placeholder={`Type a manual message to ${m.fromName}…`}
+              placeholder={`Write to ${m.fromName}…`}
               className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
             <div className="flex items-center gap-2">
               <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim()}>
-                {busy ? "Sending…" : "Send Manual Reply"}
+                {busy ? "Sending…" : "Send"}
               </Button>
             </div>
           </div>
         ) : !p ? (
           <div className="space-y-2.5">
             <div className="flex items-center justify-between text-xs text-stone-500">
-              <span className="font-semibold text-stone-700">✍️ Write manual reply to {m.fromName}</span>
+              <span className="font-semibold text-stone-700">Write your reply to {m.fromName}</span>
             </div>
             <textarea
               value={manualText}
               onChange={(e) => setManualText(e.target.value)}
               rows={4}
-              placeholder={`Type your reply to ${m.fromName}…`}
+              placeholder={`Write your reply to ${m.fromName}…`}
               className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
             <div className="flex items-center gap-2">
               <Button onClick={() => sendManualReply(manualText, id)} disabled={busy || !manualText.trim()}>
-                {busy ? "Sending…" : "Send Manual Reply"}
+                {busy ? "Sending…" : "Send"}
               </Button>
             </div>
           </div>
@@ -401,7 +401,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
                       : "text-stone-600 hover:text-stone-900"
                   }`}
                 >
-                  🤖 AI Draft
+                  Suggested reply
                 </button>
                 <button
                   type="button"
@@ -415,7 +415,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
                       : "text-stone-600 hover:text-stone-900"
                   }`}
                 >
-                  ✍️ Write Manually
+                  Write it yourself
                 </button>
               </div>
               {replyMode === "ai" && (open.draft ?? p.draftReply) !== p.draftReply ? (
@@ -423,7 +423,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
                   onClick={() => dispatch({ type: "set_draft", id, draft: p.draftReply })}
                   className="text-xs text-stone-500 hover:underline"
                 >
-                  Reset to original AI draft
+                  Back to the suggested reply
                 </button>
               ) : null}
             </div>
@@ -431,7 +431,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
               value={open.draft ?? (replyMode === "manual" ? "" : p.draftReply)}
               onChange={(e) => dispatch({ type: "set_draft", id, draft: e.target.value })}
               rows={Math.min(10, Math.max(3, (open.draft ?? (replyMode === "manual" ? "" : p.draftReply)).split("\n").length))}
-              placeholder={replyMode === "manual" ? `Write your manual reply to ${m.fromName}…` : "Edit the AI draft…"}
+              placeholder={replyMode === "manual" ? `Write your reply to ${m.fromName}…` : "Edit the suggested reply…"}
               className="w-full rounded-xl border border-stone-300 px-4 py-3 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
             <div className="mt-2 flex items-center gap-2 flex-wrap">
@@ -442,7 +442,7 @@ export function Thread({ conversation }: { conversation: Conversation }) {
                 {busy
                   ? "Sending…"
                   : replyMode === "manual"
-                    ? "Send Manual Reply"
+                    ? "Send"
                     : approvedCount
                       ? `Approve & send · ${approvedCount} action${approvedCount === 1 ? "" : "s"}`
                       : "Send"}

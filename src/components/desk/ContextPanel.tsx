@@ -5,7 +5,7 @@ import { useStore, type InboxItem } from "@/lib/store";
 import { fmtDate } from "@/components/ui";
 import { HANDOFF_LABEL, type ProposedAction } from "@/lib/agent/schema";
 import { DEPARTMENT_LABEL, getBooking, getGuest, getHotel, nightsBetween, POLICIES } from "@/lib/pms";
-import { AI_OWNER_ID } from "@/lib/desk/roster";
+import { AI_OWNER_ID, ASSISTANT_NAME } from "@/lib/desk/roster";
 import type { Conversation } from "@/lib/desk/visibility";
 
 function actionLine(a: ProposedAction): { title: string; detail?: string; why?: string; restricted?: boolean; blocked?: boolean } {
@@ -99,7 +99,7 @@ export function ContextPanel({ conversation }: { conversation: Conversation }) {
       </Block>
 
       {p ? (
-        <Block title="What the AI agent read">
+        <Block title="What Aurel Assistant read">
           <p className="text-[13px] text-stone-700">{p.triage.summary}</p>
         </Block>
       ) : null}
@@ -184,8 +184,10 @@ export function ContextPanel({ conversation }: { conversation: Conversation }) {
 
       {p && analysis ? (
         <section className="px-4 py-4 text-[11px] text-stone-400 leading-relaxed">
-          Sorted by {analysis.engine === "gemini" ? analysis.model : "the rules engine"}
-          {analysis.fallbackError ? <span className="text-rose-600"> after the live model failed</span> : null} · confidence {Math.round(p.confidence * 100)}%
+          <span title={analysis.engine === "gemini" ? `Language model: ${analysis.model}` : analysis.fallbackError ? `Model unavailable: ${analysis.fallbackError}` : "Deterministic rules engine"}>
+            Sorted by {analysis.engine === "gemini" ? ASSISTANT_NAME : analysis.fallbackError ? "the rules engine (model unavailable)" : "the rules engine"}
+          </span>
+          {" "}· confidence {Math.round(p.confidence * 100)}%
           {head.ownerId === AI_OWNER_ID ? "" : ` · ${head.ownerRule?.toLowerCase() ?? ""}`}
           {analysis.toolCalls?.length ? (
             <>

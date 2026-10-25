@@ -33,6 +33,17 @@ export function Nav() {
     return () => clearInterval(t);
   }, []);
 
+  // Plain words for the team: what sorts their mail right now, and only the detail that changes what they do.
+  const live = health?.engine === "gemini";
+  const used = health?.used ?? 0;
+  const capacity = health?.capacity ?? 0;
+  const nearLimit = live && capacity > 0 && used / capacity >= 0.8;
+  const assistantLabel = !live ? "Aurel Assistant: rules only" : nearLimit ? `Aurel Assistant: ${used} of ${capacity} requests used today` : "Aurel Assistant on";
+  const assistantTone = live && !nearLimit ? "green" : "amber";
+  const assistantTip = live
+    ? `Sorting and drafting with the language model. Requests since the server started, per model (free tier allows ${health?.usage?.[0]?.limit ?? 20} a day each): ${(health?.usage ?? []).map((u) => `${u.model} ${u.used}/${u.limit}`).join(" · ")}. When every model is used up for the day the rules engine takes over and says so on each item.`
+    : "No model key set: the deterministic rules engine sorts messages and writes plainer drafts. Nothing is lost.";
+
   const openTraces = state.traces.filter((t) => t.status !== "done").length;
   const pending = state.order.filter((id) => isPending(state.items[id])).length;
 
@@ -66,20 +77,13 @@ export function Nav() {
           {gmail?.configured ? (
             <span className="flex items-center gap-1.5 text-xs text-stone-500" title={gmail.error ? `Gmail error: ${gmail.error}` : gmail.send ? "Live mailbox: new mail arrives here and approved replies are really sent" : "Live mailbox, read only"}>
               <span className={`h-2 w-2 rounded-full ${gmail.error ? "bg-rose-500" : "bg-emerald-500"}`} />
-              {gmail.address ? `Live mail: ${gmail.address}${gmail.send ? "" : " (read only)"}` : "Gmail not reachable"}
+              {gmail.address ? `Live mail: ${gmail.address}${gmail.send ? "" : " (read only)"}` : "Mailbox not reachable"}
             </span>
           ) : null}
           {health ? (
-            <span
-              className="flex items-center gap-1.5 text-xs text-stone-500"
-              title={
-                health.engine === "gemini"
-                  ? `Model requests since the server started, per model (free tier allows ${health.usage?.[0]?.limit ?? 20} a day each): ${(health.usage ?? []).map((u) => `${u.model} ${u.used}/${u.limit}`).join(" · ")}`
-                  : "No GEMINI_API_KEY set; the rules engine sorts messages"
-              }
-            >
-              <span className={`h-2 w-2 rounded-full ${health.engine === "gemini" ? ((health.used ?? 0) / (health.capacity || 1) > 0.8 ? "bg-rose-500" : "bg-emerald-500") : "bg-amber-400"}`} />
-              {health.engine === "gemini" ? `Gemini live${typeof health.used === "number" && health.capacity ? ` · ${health.used}/${health.capacity} requests` : ""}` : "Rules engine"}
+            <span className="flex items-center gap-1.5 text-xs text-stone-500" title={assistantTip}>
+              <span className={`h-2 w-2 rounded-full ${assistantTone === "green" ? "bg-emerald-500" : "bg-amber-400"}`} />
+              {assistantLabel}
             </span>
           ) : null}
           {state.session ? <NotificationBell /> : null}

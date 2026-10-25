@@ -302,7 +302,7 @@ export async function analyzeWithGemini(
     p.actions = [];
     p.draftReply = TEMPLATES.off_topic_decline({ name: first, channel: msg.channel });
     p.autoSendEligible = false;
-    p.autoSend = { kind: "off_topic_decline", reason: inbound.ok ? "Model judged the message off-topic." : `Topic check: ${inbound.reason}.`, body: p.draftReply };
+    p.autoSend = { kind: "off_topic_decline", reason: inbound.ok ? "Aurel Assistant judged the message off-topic." : `Topic check: ${inbound.reason}.`, body: p.draftReply };
   }
   // The two fixed templates the desk sends at once, whatever the model drafted. The model's draft becomes the owner's follow-up.
   const hotelName = p.triage.hotelId ? getHotel(p.triage.hotelId)?.name : undefined;

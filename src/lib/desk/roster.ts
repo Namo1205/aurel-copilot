@@ -54,7 +54,9 @@ export const ROSTER: Staff[] = [
   { id: "agt-13", name: "Paolo Bianchi", role: "agent", onShift: false, shift: null },
 ];
 
+// The software, as the team sees it. The id stays "ai-agent" because browsers already store it.
 export const AI_OWNER_ID = "ai-agent";
+export const ASSISTANT_NAME = "Aurel Assistant";
 // A reply read back from the mailbox when the desk was rebuilt; who approved it is not recorded there.
 export const MAILBOX_OWNER_ID = "mailbox";
 export const PENDING_LIMIT = 15;
@@ -108,7 +110,7 @@ export function staffById(id: string): Staff | undefined {
 
 export function ownerName(id: string | null): string {
   if (!id) return "Unassigned";
-  if (id === AI_OWNER_ID) return "AI agent";
+  if (id === AI_OWNER_ID) return ASSISTANT_NAME;
   if (id === MAILBOX_OWNER_ID) return "The desk, earlier";
   return staffById(id)?.name ?? id;
 }
@@ -150,7 +152,7 @@ export function assignOwner(input: AssignInput): AssignResult {
   const leastLoaded = (list: Staff[]) =>
     [...list].sort((a, b) => (pendingByOwner[a.id] ?? 0) - (pendingByOwner[b.id] ?? 0))[0];
 
-  if (q === "auto") return { ownerId: AI_OWNER_ID, rotation, rule: "Sends alone: the AI agent owns it." };
+  if (q === "auto") return { ownerId: AI_OWNER_ID, rotation, rule: "Sends alone: Aurel Assistant owns it." };
 
   if (q === "manager") {
     const m = leastLoaded(onShift("manager")) ?? ROSTER.find((s) => s.role === "manager")!;

@@ -8,8 +8,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Aurel Reservations AI Agent",
-  description: "AI agent for the Aurel Hotels reservations desk: sort, assign an owner, draft, trace, approve.",
+  title: "Aurel Reservations",
+  description: "The Aurel Hotels reservations desk: every message sorted, owned, drafted and traced; a person approves.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

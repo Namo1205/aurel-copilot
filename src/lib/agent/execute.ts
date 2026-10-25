@@ -48,7 +48,7 @@ export function execute(input: {
             summary: action.summary,
             due: action.due,
             sensitive: action.sensitive,
-            source: `AI agent:${message.id}`,
+            source: `Aurel Assistant:${message.id}`,
           }),
         );
         break;

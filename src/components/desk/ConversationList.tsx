@@ -6,7 +6,7 @@ import { ChannelIcon, timeAgo } from "@/components/ui";
 import { CATEGORY_LABEL } from "@/lib/agent/schema";
 import { getHotel } from "@/lib/pms";
 import { redactCards } from "@/lib/agent/rules";
-import { ownerName } from "@/lib/desk/roster";
+import { ASSISTANT_NAME, ownerName } from "@/lib/desk/roster";
 import type { Conversation, View } from "@/lib/desk/visibility";
 
 export function ConversationList({
@@ -77,7 +77,7 @@ export function ConversationList({
           const ageMin = Math.round((now - Date.parse(it.receivedAt)) / 60000);
           const stale = waiting && ageMin > 120;
           const mine = it.ownerId === me;
-          const preview = it.result?.sentReply && !waiting ? `You: ${it.result.sentReply.body}` : it.autoSentAt && !waiting ? `AI agent: ${it.autoSentBody ?? ""}` : (m.subject ? `${m.subject} · ` : "") + redactCards(m.body);
+          const preview = it.result?.sentReply && !waiting ? `You: ${it.result.sentReply.body}` : it.autoSentAt && !waiting ? `${ASSISTANT_NAME}: ${it.autoSentBody ?? ""}` : (m.subject ? `${m.subject} · ` : "") + redactCards(m.body);
           const meta = [cat ? CATEGORY_LABEL[cat] : null, hotel ? hotel.name.replace(/^Aurel /, "") : null, mine ? null : ownerName(it.ownerId), c.items.length > 1 ? `${c.items.length} messages` : null].filter(Boolean).join(" · ");
           return (
             <li key={c.key}>

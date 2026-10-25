@@ -52,7 +52,7 @@ export default function Ops() {
           <Badge tone="amber">simulated PMS view</Badge>
         </div>
         <p className="text-sm text-stone-600 mt-1 max-w-2xl">
-          In the real product this screen does not exist: the AI agent writes each trace into the hotel&apos;s PMS and the department works it there. This page stands in for that PMS list so you can see what lands at the hotel, acknowledge it and mark it done. The dashboard reads &quot;promises kept&quot; from these statuses.
+          In the real product this screen does not exist: Aurel Assistant writes each trace into the hotel&apos;s PMS and the department works it there. This page stands in for that PMS list so you can see what lands at the hotel, acknowledge it and mark it done. The dashboard reads &quot;promises kept&quot; from these statuses.
         </p>
         <div className="mt-3 flex gap-2 text-xs">
           <Badge tone={open ? "amber" : "green"}>{open} open</Badge>

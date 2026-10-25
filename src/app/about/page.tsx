@@ -58,7 +58,7 @@ export default function About() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">How it works</h1>
         <p className="text-sm text-stone-600 mt-2 leading-relaxed">
-          One idea: <b>sort every message by type, then send each type to the cheapest safe handler.</b> Documents for policy questions. The PMS for prices. People for judgement calls. Traces for the hotels. The AI agent is the software; an agent is a person on the 22-person reservations desk.
+          One idea: <b>sort every message by type, then send each type to the cheapest safe handler.</b> Documents for policy questions. The PMS for prices. People for judgement calls. Traces for the hotels. Aurel Assistant is the software; an agent is a person on the 22-person reservations desk.
         </p>
       </div>
 
@@ -66,11 +66,11 @@ export default function About() {
         <h2 className="font-medium">What happens to every message</h2>
         <ol className="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
           {[
-            ["Sort", "Type, hotel, urgency, sensitive data. Card numbers removed before anything is stored or shown. A topic check in code runs first: not about a stay, or an instruction aimed at the AI, means a decline template."],
-            ["Assign an owner", "Every item gets a named owner on arrival, by rule: the AI agent for policy-only questions, the next agent in rotation, a senior for VIP or unsorted, the manager for exceptions, a groups specialist for groups. Nothing is ever unowned, and nothing stays with someone who has gone home: at shift end, pending items move by the same rule and the dashboard logs it."],
+            ["Sort", "Type, hotel, urgency, sensitive data. Card numbers removed before anything is stored or shown. A topic check in code runs first: not about a stay, or an instruction aimed at the assistant, means a decline template."],
+            ["Assign an owner", "Every item gets a named owner on arrival, by rule: Aurel Assistant for policy-only questions, the next agent in rotation, a senior for VIP or unsorted, the manager for exceptions, a groups specialist for groups. Nothing is ever unowned, and nothing stays with someone who has gone home: at shift end, pending items move by the same rule and the dashboard logs it."],
             ["Prepare", "Live price from the PMS, the right hotel policy, one trace per request, a draft reply, and a list of what was deliberately not promised."],
             ["Show it to the right person", "Each role sees only the conversations they are responsible for: agents their own, seniors their team's, managers everything, groups specialists the Sales ones. Important rises to the top. Cited policy answers and the three fixed templates are sent alone and logged."],
-            ["Approve", "The thread reads like a chat: the guest on the left, what we sent on the right, the AI agent's draft in the composer. The owner approves, edits, or changes the type. Approved writes go to the PMS. The dashboard shows pending per owner, flags on stuck items, auto-sent and corrected counts, promises kept per hotel."],
+            ["Approve", "The thread reads like a chat: the guest on the left, what we sent on the right, Aurel Assistant's suggested reply in the composer. The owner approves, edits, or changes the type. Approved writes go to the PMS. The dashboard shows pending per owner, flags on stuck items, auto-sent and corrected counts, promises kept per hotel."],
           ].map(([t, d], i) => (
             <li key={t} className="rounded-lg border border-stone-200 bg-white p-4">
               <div className="text-xs text-stone-400">Step {i + 1}</div>
@@ -116,7 +116,7 @@ export default function About() {
         <h2 className="font-medium">Two engines, one contract</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           <div className="rounded-lg border border-stone-200 bg-white p-4">
-            <Badge tone="green">Live model (Gemini)</Badge>
+            <Badge tone="green">Language model (Google Gemini)</Badge>
             <p className="mt-2 text-xs text-stone-600 leading-relaxed">
               Google Gemini with read-only PMS tools: look up a booking, live rates, policy documents, modification and cancellation checks. On when <span className="font-mono">GEMINI_API_KEY</span> is set. Its PMS lookups are shown on the desk so the owner can see what it checked. Code-level guardrails run after the model answers: card redaction, modification re-check against the PMS, restricted flag on sensitive traces, topic check on the draft, human approval forced.
             </p>
@@ -137,7 +137,7 @@ export default function About() {
             One handbook per hotel plus a group handbook, written in plain markdown in <span className="font-mono text-xs">docs/policies</span>, the way a hotel would actually maintain them: check-in times, facilities, parking, pets, transfers, dining, children, accessibility, and the group rules on cancellation, modifications, parity, payment, sensitive data, groups, early and late check-out, occasions, cots, travel advisors.
           </p>
           <p className="mt-2">
-            A build step cuts each handbook into sections and embeds them with Gemini&apos;s embedding model. When a guest asks a question, the AI agent searches by meaning, so &quot;can my dog come&quot; finds the pets section and &quot;can we bring our six-year-old&quot; finds the children rule, then answers from that section and cites it. Keyword search is the tiebreaker and the fallback when there is no key. A hotel edits its handbook, the build runs, the answers change. Nothing is hard-coded in the AI agent.
+            A build step cuts each handbook into sections and embeds them with Gemini&apos;s embedding model. When a guest asks a question, the assistant searches by meaning, so &quot;can my dog come&quot; finds the pets section and &quot;can we bring our six-year-old&quot; finds the children rule, then answers from that section and cites it. Keyword search is the tiebreaker and the fallback when there is no key. A hotel edits its handbook, the build runs, the answers change. Nothing is hard-coded in the assistant.
           </p>
         </div>
       </section>

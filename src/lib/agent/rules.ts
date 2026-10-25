@@ -761,7 +761,7 @@ export function analyzeWithRules(msg: InboundMessage, now: Date = new Date()): A
   if (!paras.length) {
     paras.push("Thank you for your message. I want to make sure I help with the right thing: could you tell me a little more about what you need, and your booking reference if you have one?");
     confidence = 0.4;
-    actions.push({ type: "handoff", to: "reservations_agent", reason: "Intent unclear to the AI agent.", urgency: "today", context: text.slice(0, 300) });
+    actions.push({ type: "handoff", to: "reservations_agent", reason: "Intent unclear to Aurel Assistant.", urgency: "today", context: text.slice(0, 300) });
   }
 
   return finish(category, urgency);
@@ -831,7 +831,7 @@ function capitalise(s: string): string {
 
 function summarise(cat: Category, it: Intents, hotel?: Hotel, booking?: Booking): string {
   const bits: string[] = [];
-  if (cat === "off_topic") return "Not about a stay at Aurel, or an attempt to instruct the AI agent. Declined by template.";
+  if (cat === "off_topic") return "Not about a stay at Aurel, or an attempt to instruct the assistant. Declined by template.";
   if (it.card) return "Guest sent card details in the message. Redact and send payment link.";
   if (cat === "group_event") bits.push("Group or event enquiry; route to sales");
   if (cat === "cancellation_refund") bits.push(it.compassionate ? "Compassionate cancellation on a non-refundable booking" : "Cancellation request");

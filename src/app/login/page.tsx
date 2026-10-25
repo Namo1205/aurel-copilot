@@ -111,7 +111,7 @@ function LoginForm() {
           <div className="flex items-center gap-2">
             <span className="h-8 w-8 rounded-md bg-brand text-white grid place-items-center font-semibold">A</span>
             <div>
-              <div className="font-semibold">Aurel Reservations AI Agent</div>
+              <div className="font-semibold">Aurel Reservations</div>
               <div className="text-xs text-stone-500">Sign in to the desk</div>
             </div>
           </div>
