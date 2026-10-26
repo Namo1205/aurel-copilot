@@ -131,7 +131,7 @@ Desk tabs poll the mailbox every 20 seconds, so with every tab closed nothing is
 - sends the cited policy answer, the question asking which hotel, the group acknowledgement, the holding reply or the off-topic decline, then labels the message `Aurel/Auto-replied` and leaves it unread, so the next desk tab still receives it and shows the reply in the thread;
 - labels everything that needs a person `Aurel/Waiting` and leaves it alone for the desk.
 
-Nothing is stored on the server; the Gmail labels are the whole state, so any number of schedulers may call the route and a message is still answered once. One run stops taking new mail after 75 seconds and reports `remaining`; the next run continues. One cost to know about: a message the check has seen is sorted again when a desk tab takes it, so on the free Gemini tier every live email costs roughly double while the schedule is on.
+Nothing is stored on the server; the Gmail labels are the whole state, so any number of schedulers may call the route and a message is still answered once. One run stops taking new mail after 20 seconds (cron-job.org gives up at 30) and reports `remaining`; the next run continues. One cost to know about: a message the check has seen is sorted again when a desk tab takes it, so on the free Gemini tier every live email costs roughly double while the schedule is on.
 
 Three schedulers, in the order they matter:
 

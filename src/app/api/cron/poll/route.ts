@@ -7,9 +7,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 // One run stops taking new messages after this long; what is left stays unlabelled
-// for the next run. A single Gemini sort can take 40 s, and the function is cut off
-// at maxDuration with nothing reported.
-const BUDGET_MS = 75_000;
+// for the next run, five minutes later. cron-job.org closes its connection at 30 s
+// and counts the run as failed, so a run must answer well inside that; a single
+// Gemini sort can take 40 s, and maxDuration keeps one slow sort from being cut off.
+const BUDGET_MS = 20_000;
 
 // The scheduled mailbox check. Called every few minutes with
 // "Authorization: Bearer CRON_SECRET" by whichever scheduler is set up: an external
