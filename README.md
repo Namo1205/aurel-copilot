@@ -1,6 +1,6 @@
 # Aurel Reservations AI Agent
 
-Prototype for the Aurel Hotels AI PM take-home. An AI agent reads every email to the central reservations desk (WhatsApp and OTA messaging follow next quarter), marks its type, assigns a named owner, drafts the reply with live PMS prices and the hotel's own policy, turns requests into PMS traces, and sends alone only what cannot go wrong: cited policy answers, a fixed question back when a policy question names no hotel, and the fixed templates. A message is sorted together with the guest's earlier messages in the same conversation, so a one-word reply such as "Lisboa" completes the earlier question. People approve the rest in one click. A dashboard shows every owner's pending work.
+Prototype for the Aurel Hotels AI PM take-home. An AI agent reads every email to the central reservations desk (WhatsApp follows in week 11, OTA messaging next quarter), marks its type, assigns a named owner, drafts the reply with live PMS prices and the hotel's own policy, turns requests into PMS traces, and sends alone only what cannot go wrong: cited policy answers, a fixed question back when a policy question names no hotel, and the fixed templates. A message is sorted together with the guest's earlier messages in the same conversation, so a one-word reply such as "Lisboa" completes the earlier question. People approve the rest in one click. A dashboard shows every owner's pending work.
 
 Deliverables are in [`docs/`](docs/):
 
@@ -9,7 +9,7 @@ Deliverables are in [`docs/`](docs/):
 | 1 | Strategy memo (3 pages) | [docs/01-strategy-memo.pdf](docs/01-strategy-memo.pdf) |
 | 2 | v1 PRD (4 pages) | [docs/02-prd.pdf](docs/02-prd.pdf) |
 | 3 | Working prototype | this repo (deploy link in the submission) |
-| 4 | Build log (1 page) | [docs/04-build-log.md](docs/04-build-log.md) |
+| 4 | Build log | [docs/04-build-log.md](docs/04-build-log.md) |
 | – | Demo script (12 minutes, live email) | [docs/05-demo-script.md](docs/05-demo-script.md) |
 | – | Emails to send while recording, with expected results | [docs/06-recording-emails.md](docs/06-recording-emails.md) |
 
@@ -30,7 +30,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Models are tried in a chain: `GEMINI_MODEL` first, then `gemini-3-flash-preview`, then `gemini-3.5-flash-lite` (override with `GEMINI_MODELS=a,b,c`). A model whose daily quota is used up, or that is retired or overloaded, hands over to the next; only when every model fails does the desk drop to the rules engine, labelled on the item. On the free tier that triples the number of live emails per day.
+Five models are tried in a chain: `GEMINI_MODEL` first, then `gemini-3-flash-preview`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite` and `gemini-3.1-flash-lite-preview` (override with `GEMINI_MODELS=a,b,c`). A model whose daily quota is used up, or that is retired or overloaded, hands over to the next; only when every model fails does the desk drop to the rules engine, labelled on the item. On the free tier that multiplies the number of live emails per day by the number of models with quota left.
 
 Set `COPILOT_MODE=rules` to force the rules engine even when a key is present.
 
@@ -41,7 +41,7 @@ Four roles, one shared password: `aurel` locally, or whatever `DESK_PASSWORD` is
 | Role | Deep link | What they see first |
 |---|---|---|
 | Reservations agent | `/login?as=agt-1` | Open: their own conversations |
-| Senior agent | `/login?as=snr-1` | Same, plus Important, Sent alone, the Team section of the rail and reassignment |
+| Senior agent | `/login?as=snr-1` | Same, plus Sent alone, the Team section of the rail and reassignment |
 | Reservations manager | `/login?as=mgr-1` | Dashboard, then Needs a manager |
 | Groups & events specialist | `/login?as=grp-1` | Open: group and event conversations |
 
@@ -53,7 +53,7 @@ The desk is a conversation view: the rail and the list on the left, the thread i
 
 | Role | Sees | Lands on |
 |---|---|---|
-| Agent | Their own conversations, open and done | Open |
+| Agent | Their own conversations: Open, Important, Done | Open |
 | Senior | Their own plus every agent's, with the Team section of the rail to focus on one agent and reassign | Open |
 | Manager | Everything, plus Needs a manager (exceptions) and Sent alone | Dashboard, then Needs a manager |
 | Groups specialist | Sales conversations only | Open |
@@ -103,13 +103,13 @@ npx tsx --env-file=.env.local scripts/search-check.ts # keyword vs meaning on 12
 
 ## Live Gmail (optional, for the demo)
 
-A real mailbox for the desk. A guest emails it from a phone, the message appears on the desk within 20 seconds, the owner approves, and the reply lands in the guest's inbox in the same thread. Cited policy answers and the three fixed templates go out alone.
+A real mailbox for the desk. A guest emails it from a phone, the message appears on the desk within 20 seconds, the owner approves, and the reply lands in the guest's inbox in the same thread. Cited policy answers and the fixed templates go out alone.
 
 Use a fresh Gmail account for the desk, never a personal one: the desk takes every unread message in that inbox.
 
 1. Create the desk Gmail account (for example `aurel.desk.demo@gmail.com`) and sign in to it.
 2. In [Google Cloud Console](https://console.cloud.google.com) create a project, open **APIs & Services → Library**, enable **Gmail API**.
-3. **APIs & Services → OAuth consent screen** (Google Auth Platform): external, any app name, your support email. Under **Audience** keep it in *Testing* and add the desk Gmail address as a **test user**.
+3. **APIs & Services → OAuth consent screen** (Google Auth Platform): external, any app name, your support email. Under **Audience** add the desk Gmail address as a **test user**, then **publish** the app: while it stays in *Testing*, the refresh token expires every seven days.
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**, type **Desktop app**. Copy the client ID and client secret into `.env.local`:
    ```
    GMAIL_CLIENT_ID=...apps.googleusercontent.com
@@ -120,7 +120,7 @@ Use a fresh Gmail account for the desk, never a personal one: the desk takes eve
    npx tsx --env-file=.env.local scripts/gmail-auth.ts
    ```
    Open the printed URL, choose the desk account, accept the "unverified app" warning (it is your own test app), click Allow.
-6. Restart the server. The header shows **Live mail: address**. Send the desk an email and watch it arrive.
+6. Restart the server. The header pill reads **Live** and the sign-in page names the mailbox. Send the desk an email and watch it arrive.
 
 Set `GMAIL_SEND=off` to read live mail but send nothing. Mail the desk has taken is labelled `Aurel/Desk` and marked read in the mailbox. The desk only ever replies to the original sender, in the same thread, with the text the owner approved.
 
@@ -174,6 +174,7 @@ npx vercel
 npx vercel env add DESK_PASSWORD production   # what the team types to sign in
 npx vercel env add DESK_SECRET production     # signs the session cookie: openssl rand -base64 32
 npx vercel env add GEMINI_API_KEY production
+npx vercel env add CRON_SECRET production     # the scheduled check, see above; plus the three GMAIL_* variables for live mail
 npx vercel --prod
 ```
 

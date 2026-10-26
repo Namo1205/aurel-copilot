@@ -5,7 +5,7 @@ Twelve minutes, one browser window, your phone. Lead with the live email; everyt
 ## The day before
 
 - [ ] Gemini: enable billing on the Google AI Studio project, or accept that after ~6 emails the desk falls back to the rules engine (it says so on each item).
-- [ ] Gmail: if it is more than 6 days since the last sign-in, run `npx tsx --env-file=.env.local scripts/gmail-auth.ts` and approve again. Check the header says "Live mail: reservationsaurel@gmail.com".
+- [ ] Gmail: if it is more than 6 days since the last sign-in, run `npx tsx --env-file=.env.local scripts/gmail-auth.ts` and approve again. Check the header pill reads "Live" and the sign-in page names reservationsaurel@gmail.com. (Not needed once the OAuth app is published.)
 - [ ] Start the app: `npm run build && npm start`. Sign in; the mailbox loads by itself. On the sign-in page press **Load the sample messages** (or open `/?samples=load`). This gives a full desk and dashboard behind the live demo.
 - [ ] Send one test email from your phone and watch it arrive, so you know the loop works on the demo network.
 - [ ] Phone: personal email app open, a draft ready: "What time is check-out at Aurel Lisboa, and is there a gym?"
@@ -27,17 +27,17 @@ Twelve minutes, one browser window, your phone. Lead with the live email; everyt
 
 **9:30 · The dashboard the whole desk sees.** Three numbers: waiting with the oldest, replied today with the median, promises kept from PMS trace status. A red line only when a guardrail is broken. Who is waiting on whom, flags not scores, and the oldest items with reassign. "Promises kept is the number the hotels will be managed on."
 
-**10:30 · What is real and what is not, 30 seconds.** Real: the mailbox, the sending, the model, the nine handbooks and the search over them, the owner rules, the guardrails. Simulated: the PMS, WhatsApp, the hotel's trace list. "Three days of build. The memo says what we would do in a quarter."
+**10:30 · What is real and what is not, 30 seconds.** Real: the mailbox, the sending, the model, the nine handbooks and the search over them, the owner rules, the guardrails. Simulated: the PMS, WhatsApp, the hotel's trace list. "Two days of build. The memo says what we would do in a quarter."
 
-**11:00 · Ask.** The seven operational changes from the memo, a sponsor per hotel for traces, and the message to the team that the target is reply time and promises kept, not headcount.
+**11:00 · Ask.** The three work changes from the memo, a sponsor per hotel for traces, and the message to the team that the target is reply time and promises kept, not headcount.
 
 ## If the live email does not arrive
 
-Press **+** in the list header (Simulate an inbound email) and paste the same text. Sorting, drafting, traces and the dashboard behave identically; only the real send is missing. Then open the Gmail thread from your rehearsal to show a real reply that did go out.
+Press **+** in the list header (Add a simulated inbound email) and paste the same text. Sorting, drafting, traces and the dashboard behave identically; only the real send is missing. Then open the Gmail thread from your rehearsal to show a real reply that did go out.
 
 ## Do not
 
 - Do not open two browser profiles.
 - Do not type a different question than rehearsed into the policy email; the handbook covers hours, facilities, parking, pets, transfers, dining, children, accessibility, and the group rules.
 - Do not send from an address that has written to the mailbox before unless you want to explain threading.
-- Do not promise WhatsApp or a real PMS. The PRD has them in the next column with reasons.
+- Do not promise WhatsApp or a real PMS. The PRD dates WhatsApp to week 11 and OTA messaging to the second quarter, with reasons; the PMS is simulated.
